@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>UNO Canvas - By Lathif</title>
     <style>
         body {
@@ -10,10 +10,13 @@
             overflow: hidden;
             background-color: #222;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            /* Mencegah seleksi teks dan zoom di HP */
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: none; 
         }
         canvas {
             display: block;
-            user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
     </style>
@@ -43,9 +46,16 @@ const COLORS = {
     grey: '#555'
 };
 
-const CARD_W = 80;
-const CARD_H = 115;
-const CARD_RADIUS = 8;
+// UKURAN DASAR (Desktop)
+const BASE_CARD_W = 80;
+const BASE_CARD_H = 115;
+const BASE_CARD_RADIUS = 8;
+
+// VARIABEL DINAMIS (Akan berubah sesuai ukuran layar)
+let UI_SCALE = 1; 
+let CARD_W = BASE_CARD_W;
+let CARD_H = BASE_CARD_H;
+let CARD_RADIUS = BASE_CARD_RADIUS;
 
 const STATE = {
     MENU: 0,
@@ -58,6 +68,38 @@ let currentState = STATE.MENU;
 let winner = null;
 
 const mouse = { x: 0, y: 0, down: false, clicked: false };
+
+/**
+ * LOGIKA IKLAN APK (ADMOB)
+ * Iklan Web dihapus, sisa logika native untuk APK
+ */
+async function onDeviceReady() {
+    console.log("Device Ready. Memulai AdMob...");
+    
+    if (navigator.connection && navigator.connection.type === 'none') {
+        console.log("Offline: Iklan tidak ditampilkan.");
+        return;
+    }
+
+    if (typeof admob !== 'undefined') {
+        try {
+            await admob.start();
+            const banner = new admob.BannerAd({
+                // Ganti dengan Unit ID Banner yang benar (format ca-app-pub-xxx/xxx)
+                adUnitId: 'ca-app-pub-4389289343937853~6056570637', // Ini App ID dari user (sebagai placeholder)
+                position: 'bottom'
+            });
+            await banner.show();
+        } catch (e) {
+            console.error("AdMob Error:", e);
+        }
+    }
+}
+
+// Cek Cordova
+if (document.URL.indexOf( 'http://' ) === -1 && document.URL.indexOf( 'https://' ) === -1) {
+    document.addEventListener('deviceready', onDeviceReady, false);
+}
 
 /**
  * KELAS CARD (KARTU)
@@ -77,8 +119,11 @@ class Card {
         this.y += (y - this.y) * 0.2;
         
         let drawScale = scale;
+        // Hover effect dikurangi di mobile agar tidak terlalu lompat
+        let hoverLift = (UI_SCALE < 0.8) ? 15 : 30;
+
         if (this.isHovered && faceUp && !dimmed && rotation === 0) {
-            y -= 30;
+            y -= hoverLift;
             drawScale = 1.1;
         }
 
@@ -88,23 +133,23 @@ class Card {
         ctx.scale(drawScale, drawScale);
 
         ctx.shadowColor = "rgba(0,0,0,0.5)";
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 5;
+        ctx.shadowBlur = 10 * UI_SCALE;
+        ctx.shadowOffsetY = 5 * UI_SCALE;
 
         this.drawRoundedRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS, COLORS.white);
         
         ctx.shadowColor = "transparent";
 
         if (!faceUp) {
-            this.drawRoundedRect(-CARD_W/2 + 5, -CARD_H/2 + 5, CARD_W - 10, CARD_H - 10, CARD_RADIUS, COLORS.black);
+            this.drawRoundedRect(-CARD_W/2 + (5*UI_SCALE), -CARD_H/2 + (5*UI_SCALE), CARD_W - (10*UI_SCALE), CARD_H - (10*UI_SCALE), CARD_RADIUS, COLORS.black);
             ctx.fillStyle = COLORS.red;
-            ctx.font = "bold italic 30px Arial";
+            ctx.font = `bold italic ${30 * UI_SCALE}px Arial`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText("UNO", 0, 0);
         } else {
             let mainColor = (this.color === 'black') ? COLORS.black : COLORS[this.color];
-            this.drawRoundedRect(-CARD_W/2 + 5, -CARD_H/2 + 5, CARD_W - 10, CARD_H - 10, CARD_RADIUS, mainColor);
+            this.drawRoundedRect(-CARD_W/2 + (5*UI_SCALE), -CARD_H/2 + (5*UI_SCALE), CARD_W - (10*UI_SCALE), CARD_H - (10*UI_SCALE), CARD_RADIUS, mainColor);
 
             if (this.type === 'wild' || this.type === 'wild4') {
                 this.drawWildFace();
@@ -132,44 +177,48 @@ class Card {
         if (displayVal === 'skip') displayVal = '⊘';
         else if (displayVal === 'reverse') displayVal = '⇄';
         
-        let fontSize = (displayVal.length > 1) ? 35 : 50;
+        let fontSize = (displayVal.length > 1) ? (35 * UI_SCALE) : (50 * UI_SCALE);
         ctx.font = `bold italic ${fontSize}px Arial`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(displayVal, -2, 4);
+        ctx.fillText(displayVal, -2 * UI_SCALE, 4 * UI_SCALE);
         ctx.restore();
 
         ctx.fillStyle = COLORS.white;
-        ctx.font = "bold 16px Arial";
+        ctx.font = `bold ${16 * UI_SCALE}px Arial`;
         ctx.textAlign = "left";
-        ctx.fillText(displayVal, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        let offset = 8 * UI_SCALE;
+        let offsetY = 18 * UI_SCALE;
+        ctx.fillText(displayVal, -CARD_W/2 + offset, -CARD_H/2 + offsetY);
         ctx.save();
         ctx.rotate(Math.PI);
-        ctx.fillText(displayVal, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.fillText(displayVal, -CARD_W/2 + offset, -CARD_H/2 + offsetY);
         ctx.restore();
     }
 
     drawWildFace() {
-        let size = 30;
+        let size = 30 * UI_SCALE;
         ctx.fillStyle = COLORS.red; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, Math.PI, 1.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
         ctx.fillStyle = COLORS.blue; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 1.5*Math.PI, 0); ctx.lineTo(0,0); ctx.fill();
         ctx.fillStyle = COLORS.green; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0, 0.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
         ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0.5*Math.PI, Math.PI); ctx.lineTo(0,0); ctx.fill();
 
         ctx.fillStyle = "black";
-        ctx.font = "bold italic 25px Arial";
+        ctx.font = `bold italic ${25 * UI_SCALE}px Arial`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         let val = (this.value === '+4') ? '+4' : ''; 
-        if(val) ctx.fillText(val, 2, 2);
+        if(val) ctx.fillText(val, 2 * UI_SCALE, 2 * UI_SCALE);
 
         ctx.fillStyle = COLORS.white;
-        ctx.font = "bold 14px Arial";
+        ctx.font = `bold ${14 * UI_SCALE}px Arial`;
         let cornerSym = (this.value === '+4') ? '+4' : 'W';
         ctx.textAlign = "left";
-        ctx.fillText(cornerSym, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        let offset = 8 * UI_SCALE;
+        let offsetY = 18 * UI_SCALE;
+        ctx.fillText(cornerSym, -CARD_W/2 + offset, -CARD_H/2 + offsetY);
         ctx.save();
         ctx.rotate(Math.PI);
-        ctx.fillText(cornerSym, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.fillText(cornerSym, -CARD_W/2 + offset, -CARD_H/2 + offsetY);
         ctx.restore();
     }
 
@@ -198,25 +247,22 @@ class Game {
         this.message = "Selamat Datang";
         this.particles = [];
         
-        // --- BUTTONS ---
-        this.btn2Player = { x: 0, y: 0, w: 200, h: 60, text: "2 PEMAIN" };
-        this.btn4Player = { x: 0, y: 0, w: 200, h: 60, text: "4 PEMAIN" };
-        this.btnOnline = { x: 0, y: 0, w: 200, h: 60, text: "MODE ONLINE" };
-        this.btnQuit = { x: 0, y: 0, w: 100, h: 40, text: "KELUAR" };
-        this.drawBtn = { x: 0, y: 0, w: 120, h: 45, text: "AMBIL" };
+        // Button dimensions will be scaled dynamically in update()
+        this.btn2Player = { text: "2 PEMAIN" };
+        this.btn4Player = { text: "4 PEMAIN" };
+        this.btnOnline = { text: "MODE ONLINE" };
+        this.btnQuit = { text: "KELUAR" };
+        this.drawBtn = { text: "AMBIL" };
 
-        // --- STATE TAMBAHAN ---
         this.comingSoonTimer = 0;
-        this.activeModal = null; // 'QUIT', 'PROFILE', null
-        this.tempInput = ""; // Menyimpan ketikan keyboard untuk profil
+        this.activeModal = null; 
+        this.tempInput = ""; 
 
-        // --- PROFIL RANDOM PEMAIN ---
         const randomNames = ["Lathif", "Player1", "Jagoan", "Tamu", "Budi", "Siti", "UnoPro"];
         this.playerName = randomNames[Math.floor(Math.random() * randomNames.length)];
         const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
         this.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
 
-        // --- PROFIL BOT ---
         this.botProfiles = {};
     }
 
@@ -228,7 +274,6 @@ class Game {
         this.players = {};
         this.players['human'] = [];
         
-        // GENERATE BOT PROFILES
         this.botProfiles = {};
         const botNamesList = ["Alex", "Sarah", "Mike", "Luna", "Rizky", "Dewi", "Budi", "Robot", "AI_01"];
         const botColorsList = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow, COLORS.grey];
@@ -321,35 +366,45 @@ class Game {
     }
 
     update() {
-        // --- MODAL HANDLING (BLOCK EVERYTHING ELSE) ---
+        // Update Button Sizes based on UI_SCALE
+        let btnW = 200 * UI_SCALE;
+        let btnH = 60 * UI_SCALE;
+        this.btn2Player.w = btnW; this.btn2Player.h = btnH;
+        this.btn4Player.w = btnW; this.btn4Player.h = btnH;
+        this.btnOnline.w = btnW; this.btnOnline.h = btnH;
+        this.btnQuit.w = 100 * UI_SCALE; this.btnQuit.h = 40 * UI_SCALE;
+        this.drawBtn.w = 120 * UI_SCALE; this.drawBtn.h = 45 * UI_SCALE;
+
         if (this.activeModal) {
             if (mouse.clicked) {
                 this.handleModalClick();
                 mouse.clicked = false;
             }
-            return; // STOP UPDATE jika ada modal
+            return; 
         }
 
-        // --- MENU LOGIC ---
         if (currentState === STATE.MENU) {
             let cx = SCREEN_W/2;
             let cy = SCREEN_H/2;
             
-            this.btn2Player.x = cx - this.btn2Player.w - 10;
-            this.btn2Player.y = cy + 40;
-            this.btn4Player.x = cx + 10;
-            this.btn4Player.y = cy + 40;
+            this.btn2Player.x = cx - this.btn2Player.w - (10 * UI_SCALE);
+            this.btn2Player.y = cy + (40 * UI_SCALE);
+            
+            this.btn4Player.x = cx + (10 * UI_SCALE);
+            this.btn4Player.y = cy + (40 * UI_SCALE);
+
             this.btnOnline.x = cx - this.btnOnline.w / 2;
-            this.btnOnline.y = cy + 120;
+            this.btnOnline.y = cy + (120 * UI_SCALE);
 
             if (this.comingSoonTimer > 0) this.comingSoonTimer--;
 
             if (mouse.clicked) {
-                // KLIK PROFIL (EDIT) -> BUKA MODAL
-                let distProfile = Math.sqrt((mouse.x - 50)**2 + (mouse.y - 50)**2);
-                if (distProfile < 40 || (mouse.x > 50 && mouse.x < 250 && mouse.y > 20 && mouse.y < 80)) {
+                let pSize = 50 * UI_SCALE;
+                let distProfile = Math.sqrt((mouse.x - pSize)**2 + (mouse.y - pSize)**2);
+                // Area klik profil scaled
+                if (distProfile < (40*UI_SCALE) || (mouse.x > pSize && mouse.x < (250*UI_SCALE) && mouse.y > (20*UI_SCALE) && mouse.y < (80*UI_SCALE))) {
                     this.activeModal = 'PROFILE';
-                    this.tempInput = this.playerName; // Isi awal
+                    this.tempInput = this.playerName; 
                     mouse.clicked = false;
                     return;
                 }
@@ -374,11 +429,8 @@ class Game {
             return;
         }
 
-        // --- PLAYING LOGIC ---
-        
-        // Tombol Keluar -> BUKA MODAL
-        this.btnQuit.x = SCREEN_W - this.btnQuit.w - 20;
-        this.btnQuit.y = 20;
+        this.btnQuit.x = SCREEN_W - this.btnQuit.w - (20 * UI_SCALE);
+        this.btnQuit.y = 20 * UI_SCALE;
         if (mouse.clicked && this.isMouseOver(this.btnQuit)) {
              this.activeModal = 'QUIT';
              mouse.clicked = false;
@@ -392,13 +444,14 @@ class Game {
         }
 
         if (currPlayer === 'human' && currentState === STATE.PLAYING) {
-            this.drawBtn.x = SCREEN_W / 2 + CARD_W + 40;
-            this.drawBtn.y = SCREEN_H - 120;
+            this.drawBtn.x = SCREEN_W / 2 + CARD_W + (40 * UI_SCALE);
+            this.drawBtn.y = SCREEN_H - (120 * UI_SCALE);
 
             let hand = this.players.human;
-            let spacing = Math.min(50, (SCREEN_W - 100) / hand.length);
+            // Spacing responsive
+            let spacing = Math.min(50 * UI_SCALE, (SCREEN_W - (100 * UI_SCALE)) / hand.length);
             let startX = (SCREEN_W - (hand.length * spacing)) / 2 + spacing/2; 
-            let y = SCREEN_H - CARD_H/2 - 20;
+            let y = SCREEN_H - CARD_H/2 - (20 * UI_SCALE);
 
             let hoveredIndex = -1;
             for (let i = hand.length - 1; i >= 0; i--) {
@@ -416,7 +469,7 @@ class Game {
                 if (hoveredIndex !== -1) {
                     this.humanPlay(hoveredIndex);
                 } else {
-                    let deckX = SCREEN_W / 2 - CARD_W - 20;
+                    let deckX = SCREEN_W / 2 - CARD_W - (20 * UI_SCALE);
                     let deckY = SCREEN_H / 2;
                     let clickedDeck = (mouse.x >= deckX - CARD_W/2 && mouse.x <= deckX + CARD_W/2 &&
                                      mouse.y >= deckY - CARD_H/2 && mouse.y <= deckY + CARD_H/2);
@@ -556,7 +609,8 @@ class Game {
     }
 
     handleColorPickerInput() {
-        let size = 80; let gap = 20;
+        let size = 80 * UI_SCALE; 
+        let gap = 20 * UI_SCALE;
         let totalW = (size*4) + (gap*3);
         let startX = (SCREEN_W - totalW)/2;
         let startY = SCREEN_H/2 - size/2;
@@ -576,38 +630,32 @@ class Game {
     }
 
     handleModalClick() {
-        // Koordinat Modal (Center)
-        let w = 400, h = 200;
+        let w = 400 * UI_SCALE; let h = 200 * UI_SCALE;
         let x = SCREEN_W/2 - w/2;
         let y = SCREEN_H/2 - h/2;
 
-        let btnW = 120, btnH = 40;
-        let btnY = y + h - 60;
-        let btn1X = x + 50; 
-        let btn2X = x + w - 50 - btnW;
+        let btnW = 120 * UI_SCALE; let btnH = 40 * UI_SCALE;
+        let btnY = y + h - (60 * UI_SCALE);
+        let btn1X = x + (50 * UI_SCALE); 
+        let btn2X = x + w - (50 * UI_SCALE) - btnW;
 
         if (this.activeModal === 'QUIT') {
-            // Tombol YA
             if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
                 currentState = STATE.MENU;
                 this.activeModal = null;
             }
-            // Tombol TIDAK
             else if (mouse.x >= btn2X && mouse.x <= btn2X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
                 this.activeModal = null;
             }
         } else if (this.activeModal === 'PROFILE') {
-            // Tombol SIMPAN
             if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
                 if (this.tempInput.trim().length > 0) {
                     this.playerName = this.tempInput.substr(0, 12);
-                    // Ganti warna avatar
                     const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
                     this.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
                 }
                 this.activeModal = null;
             }
-            // Tombol BATAL
             else if (mouse.x >= btn2X && mouse.x <= btn2X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
                 this.activeModal = null;
             }
@@ -627,16 +675,16 @@ class Game {
             return; 
         }
 
-        ctx.beginPath(); ctx.arc(SCREEN_W/2, SCREEN_H/2, 160, 0, Math.PI*2);
+        ctx.beginPath(); ctx.arc(SCREEN_W/2, SCREEN_H/2, 160 * UI_SCALE, 0, Math.PI*2);
         ctx.strokeStyle = COLORS[this.currentColor] || '#333';
-        ctx.lineWidth = 10; ctx.stroke();
+        ctx.lineWidth = 10 * UI_SCALE; ctx.stroke();
         
         if (this.playerCount === 4) {
            ctx.save();
            ctx.translate(SCREEN_W/2, SCREEN_H/2);
            ctx.rotate((this.direction === 1) ? 0 : Math.PI); 
            ctx.fillStyle = "rgba(255,255,255,0.1)";
-           ctx.font = "100px Arial"; ctx.textAlign = "center"; ctx.textBaseline="middle";
+           ctx.font = `${100 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline="middle";
            ctx.fillText("↻", 0, 0);
            ctx.restore();
         }
@@ -645,109 +693,102 @@ class Game {
 
         if (this.discardPile.length > 0) {
             let top = this.discardPile[this.discardPile.length - 1];
-            top.x = centerX + 15; top.y = centerY;
-            top.draw(top.x, top.y, true);
+            top.x = centerX + (15 * UI_SCALE); top.y = centerY;
+            top.draw(top.x, top.y, true, 1, false, 0); // Scale is applied inside card.draw via coords, but card.draw needs to know rotation.
+            // Wait, card.draw scales using ctx.scale(drawScale). We need base scale there?
+            // Actually I modified Card.draw to use global CARD_W. So scale=1 is fine.
         }
 
-        let deckX = centerX - CARD_W - 15; let deckY = centerY;
+        let deckX = centerX - CARD_W - (15 * UI_SCALE); let deckY = centerY;
         for(let i=0; i<Math.min(5, this.deck.length); i++) {
             let dummy = new Card('black', '', '');
-            dummy.draw(deckX - i*2, deckY - i*2, false);
+            dummy.draw(deckX - (i*2*UI_SCALE), deckY - (i*2*UI_SCALE), false);
         }
 
-        // --- RENDER PLAYERS ---
-        this.drawHand('human', SCREEN_W/2, SCREEN_H - CARD_H/2 - 20, 0);
-        this.drawHand('botTop', SCREEN_W/2, CARD_H/2 + 20, Math.PI);
+        this.drawHand('human', SCREEN_W/2, SCREEN_H - CARD_H/2 - (20 * UI_SCALE), 0);
+        this.drawHand('botTop', SCREEN_W/2, CARD_H/2 + (20 * UI_SCALE), Math.PI);
 
         if (this.playerCount === 4) {
-            this.drawHand('botLeft', CARD_H/2 + 20, SCREEN_H/2, Math.PI/2);
-            this.drawHand('botRight', SCREEN_W - CARD_H/2 - 20, SCREEN_H/2, -Math.PI/2);
+            this.drawHand('botLeft', CARD_H/2 + (20 * UI_SCALE), SCREEN_H/2, Math.PI/2);
+            this.drawHand('botRight', SCREEN_W - CARD_H/2 - (20 * UI_SCALE), SCREEN_H/2, -Math.PI/2);
         }
 
         ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
-        ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
-        ctx.fillText(this.message, SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textAlign = "center";
+        ctx.fillText(this.message, SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
         ctx.shadowColor = "transparent";
 
         if (this.getCurrentPlayer() === 'human') {
-            ctx.fillStyle = "white"; ctx.font = "bold 14px Arial";
-            ctx.fillText("DECK", deckX, deckY - CARD_H/2 - 10);
+            ctx.fillStyle = "white"; ctx.font = `bold ${14 * UI_SCALE}px Arial`;
+            ctx.fillText("DECK", deckX, deckY - CARD_H/2 - (10 * UI_SCALE));
 
             let btn = this.drawBtn;
             let isHover = (mouse.x >= btn.x && mouse.x <= btn.x+btn.w && mouse.y >= btn.y && mouse.y <= btn.y+btn.h);
-            this.drawRoundedRect(btn.x, btn.y, btn.w, btn.h, 10, isHover ? "#eee" : "white");
-            ctx.fillStyle = "#333"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            this.drawRoundedRect(btn.x, btn.y, btn.w, btn.h, 10 * UI_SCALE, isHover ? "#eee" : "white");
+            ctx.fillStyle = "#333"; ctx.font = `bold ${18 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
         }
 
-        // --- TOMBOL KELUAR ---
         let qBtn = this.btnQuit;
         let qHover = (mouse.x >= qBtn.x && mouse.x <= qBtn.x+qBtn.w && mouse.y >= qBtn.y && mouse.y <= qBtn.y+qBtn.h);
-        this.drawRoundedRect(qBtn.x, qBtn.y, qBtn.w, qBtn.h, 5, qHover ? "#ff5555" : "rgba(255,255,255,0.2)");
-        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        this.drawRoundedRect(qBtn.x, qBtn.y, qBtn.w, qBtn.h, 5 * UI_SCALE, qHover ? "#ff5555" : "rgba(255,255,255,0.2)");
+        ctx.fillStyle = "white"; ctx.font = `bold ${16 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(qBtn.text, qBtn.x + qBtn.w/2, qBtn.y + qBtn.h/2);
 
         if (currentState === STATE.COLOR_PICKER) this.drawColorPicker();
         if (currentState === STATE.GAME_OVER) this.drawGameOver();
         
-        // MODAL (Pop-up)
         if (this.activeModal) this.drawModal();
     }
 
     drawModal() {
-        // Overlay Hitam
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.fillRect(0,0, SCREEN_W, SCREEN_H);
 
-        let w = 400, h = 200;
+        let w = 400 * UI_SCALE; let h = 200 * UI_SCALE;
         let x = SCREEN_W/2 - w/2;
         let y = SCREEN_H/2 - h/2;
 
-        // Kotak Modal
         ctx.shadowColor = "black"; ctx.shadowBlur = 20;
         ctx.fillStyle = "#333";
-        ctx.beginPath(); ctx.roundRect(x, y, w, h, 15); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 15 * UI_SCALE); ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
         ctx.shadowColor = "transparent";
 
-        // Konten
         ctx.fillStyle = "white"; ctx.textAlign = "center";
         
         if (this.activeModal === 'QUIT') {
-            ctx.font = "bold 24px Arial";
-            ctx.fillText("Keluar Permainan?", SCREEN_W/2, y + 50);
-            ctx.font = "18px Arial";
-            ctx.fillText("Kamu yakin? Nanti kamu akan kalah loh", SCREEN_W/2, y + 90);
+            ctx.font = `bold ${24 * UI_SCALE}px Arial`;
+            ctx.fillText("Keluar Permainan?", SCREEN_W/2, y + (50 * UI_SCALE));
+            ctx.font = `${18 * UI_SCALE}px Arial`;
+            ctx.fillText("Kamu yakin? Nanti kamu akan kalah loh", SCREEN_W/2, y + (90 * UI_SCALE));
 
-            // Tombol
-            this.drawModalBtn("YA", x + 50, y + h - 60, "#ff5555");
-            this.drawModalBtn("TIDAK", x + w - 170, y + h - 60, "#55aa55");
+            this.drawModalBtn("YA", x + (50 * UI_SCALE), y + h - (60 * UI_SCALE), "#ff5555");
+            this.drawModalBtn("TIDAK", x + w - (170 * UI_SCALE), y + h - (60 * UI_SCALE), "#55aa55");
         } 
         else if (this.activeModal === 'PROFILE') {
-            ctx.font = "bold 24px Arial";
-            ctx.fillText("Ubah Nama Profil", SCREEN_W/2, y + 40);
+            ctx.font = `bold ${24 * UI_SCALE}px Arial`;
+            ctx.fillText("Ubah Nama Profil", SCREEN_W/2, y + (40 * UI_SCALE));
 
-            // Input Box visual
             ctx.fillStyle = "white";
-            ctx.fillRect(x + 50, y + 60, w - 100, 40);
-            ctx.fillStyle = "black"; ctx.font = "20px Arial"; ctx.textAlign="left";
-            ctx.fillText(this.tempInput + "|", x + 60, y + 87); // Cursor |
+            ctx.fillRect(x + (50 * UI_SCALE), y + (60 * UI_SCALE), w - (100 * UI_SCALE), 40 * UI_SCALE);
+            ctx.fillStyle = "black"; ctx.font = `${20 * UI_SCALE}px Arial`; ctx.textAlign="left";
+            ctx.fillText(this.tempInput + "|", x + (60 * UI_SCALE), y + (87 * UI_SCALE)); 
 
-            // Tombol
-            this.drawModalBtn("SIMPAN", x + 50, y + h - 60, "#5555ff");
-            this.drawModalBtn("BATAL", x + w - 170, y + h - 60, "#ff5555");
+            this.drawModalBtn("SIMPAN", x + (50 * UI_SCALE), y + h - (60 * UI_SCALE), "#5555ff");
+            this.drawModalBtn("BATAL", x + w - (170 * UI_SCALE), y + h - (60 * UI_SCALE), "#ff5555");
         }
     }
 
     drawModalBtn(text, x, y, color) {
-        let w = 120, h = 40;
+        let w = 120 * UI_SCALE; let h = 40 * UI_SCALE;
         let isHover = (mouse.x >= x && mouse.x <= x+w && mouse.y >= y && mouse.y <= y+h);
         
         ctx.fillStyle = isHover ? "white" : color;
-        ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 8 * UI_SCALE); ctx.fill();
         
         ctx.fillStyle = isHover ? color : "white";
-        ctx.font = "bold 16px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.font = `bold ${16 * UI_SCALE}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
         ctx.fillText(text, x + w/2, y + h/2);
     }
 
@@ -756,9 +797,9 @@ class Game {
         let count = hand.length;
         if (count === 0) return;
 
-        let spacing = 30;
-        if (playerId === 'human') spacing = Math.min(50, (SCREEN_W - 100) / count);
-        else spacing = Math.min(20, 200 / count);
+        let spacing = 30 * UI_SCALE;
+        if (playerId === 'human') spacing = Math.min(50 * UI_SCALE, (SCREEN_W - (100 * UI_SCALE)) / count);
+        else spacing = Math.min(20 * UI_SCALE, (200 * UI_SCALE) / count);
 
         let totalW = (count - 1) * spacing;
         
@@ -776,21 +817,21 @@ class Game {
         ctx.translate(centerX, centerY);
         ctx.rotate(rotation);
 
-        let avatarY = CARD_H/2 + 45; 
-        let avatarSize = 20;
+        let avatarY = CARD_H/2 + (45 * UI_SCALE); 
+        let avatarSize = 20 * UI_SCALE;
         
         let profileColor = this.botProfiles[playerId] ? this.botProfiles[playerId].color : COLORS.grey;
         ctx.beginPath(); ctx.arc(0, avatarY, avatarSize, 0, Math.PI*2);
         ctx.fillStyle = profileColor; ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
 
-        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "white"; ctx.font = `bold ${16 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         let name = this.getPlayerName(playerId);
         ctx.fillText(name.charAt(0).toUpperCase(), 0, avatarY);
 
         ctx.fillStyle = (this.getCurrentPlayer() === playerId) ? "#ffff00" : "white";
-        ctx.font = "bold 16px Arial"; 
-        ctx.fillText(`${name} (${count})`, 0, avatarY + 30);
+        ctx.font = `bold ${16 * UI_SCALE}px Arial`; 
+        ctx.fillText(`${name} (${count})`, 0, avatarY + (30 * UI_SCALE));
 
         for (let i = 0; i < count; i++) {
             let offset = (i * spacing) - (totalW / 2);
@@ -805,9 +846,9 @@ class Game {
         ctx.fillStyle = "white";
         ctx.beginPath(); ctx.roundRect(x - CARD_W/2, y - CARD_H/2, CARD_W, CARD_H, CARD_RADIUS); ctx.fill();
         ctx.fillStyle = COLORS.black;
-        ctx.beginPath(); ctx.roundRect(x - CARD_W/2 + 4, y - CARD_H/2 + 4, CARD_W - 8, CARD_H - 8, CARD_RADIUS); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(x - CARD_W/2 + 4*UI_SCALE, y - CARD_H/2 + 4*UI_SCALE, CARD_W - 8*UI_SCALE, CARD_H - 8*UI_SCALE, CARD_RADIUS); ctx.fill();
         ctx.fillStyle = COLORS.red;
-        ctx.font = "bold 20px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `bold ${20 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText("UNO", x, y);
         ctx.shadowColor = "transparent";
     }
@@ -817,66 +858,67 @@ class Game {
         
         ctx.shadowColor = "black"; ctx.shadowBlur = 10;
         ctx.fillStyle = "#ff5555";
-        ctx.font = "bold italic 100px Arial"; ctx.textAlign = "center";
-        ctx.fillText("UNO", SCREEN_W/2, SCREEN_H/2 - 100);
-        ctx.strokeStyle = "white"; ctx.lineWidth = 4;
-        ctx.strokeText("UNO", SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.font = `bold italic ${100 * UI_SCALE}px Arial`; ctx.textAlign = "center";
+        ctx.fillText("UNO", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4 * UI_SCALE;
+        ctx.strokeText("UNO", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
         ctx.shadowColor = "transparent";
 
         let b2 = this.btn2Player;
         let h2 = this.isMouseOver(b2);
-        this.drawRoundedRect(b2.x, b2.y, b2.w, b2.h, 10, h2 ? "#ffaa00" : COLORS.blue);
-        ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.textBaseline="middle";
+        this.drawRoundedRect(b2.x, b2.y, b2.w, b2.h, 10 * UI_SCALE, h2 ? "#ffaa00" : COLORS.blue);
+        ctx.fillStyle = "white"; ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textBaseline="middle";
         ctx.fillText(b2.text, b2.x + b2.w/2, b2.y + b2.h/2);
 
         let b4 = this.btn4Player;
         let h4 = this.isMouseOver(b4);
-        this.drawRoundedRect(b4.x, b4.y, b4.w, b4.h, 10, h4 ? "#ffaa00" : COLORS.green);
+        this.drawRoundedRect(b4.x, b4.y, b4.w, b4.h, 10 * UI_SCALE, h4 ? "#ffaa00" : COLORS.green);
         ctx.fillStyle = "white"; 
         ctx.fillText(b4.text, b4.x + b4.w/2, b4.y + b4.h/2);
 
         let bOn = this.btnOnline;
         let hOn = this.isMouseOver(bOn);
-        this.drawRoundedRect(bOn.x, bOn.y, bOn.w, bOn.h, 10, hOn ? "#aaa" : COLORS.grey);
+        this.drawRoundedRect(bOn.x, bOn.y, bOn.w, bOn.h, 10 * UI_SCALE, hOn ? "#aaa" : COLORS.grey);
         ctx.fillStyle = "white";
         ctx.fillText(bOn.text, bOn.x + bOn.w/2, bOn.y + bOn.h/2);
 
-        let pX = 50, pY = 50, pR = 25;
-        ctx.beginPath(); ctx.arc(pX, pY, pR, 0, Math.PI*2);
+        let pSize = 50 * UI_SCALE;
+        let pR = pSize / 2;
+        ctx.beginPath(); ctx.arc(pSize, pSize, pR, 0, Math.PI*2);
         ctx.fillStyle = this.playerAvatarColor;
         ctx.fill(); 
         ctx.lineWidth=2; ctx.strokeStyle="white"; ctx.stroke();
         
-        ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillStyle = "white"; ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
         let initial = this.playerName.charAt(0).toUpperCase();
-        ctx.fillText(initial, pX, pY);
+        ctx.fillText(initial, pSize, pSize);
 
-        ctx.textAlign="left"; ctx.font = "bold 20px Arial";
-        ctx.fillText(this.playerName, pX + 35, pY);
-        ctx.fillStyle = "#aaa"; ctx.font = "italic 12px Arial";
-        ctx.fillText("(Klik untuk ubah)", pX + 35, pY + 20);
+        ctx.textAlign="left"; ctx.font = `bold ${20 * UI_SCALE}px Arial`;
+        ctx.fillText(this.playerName, pSize + (35 * UI_SCALE), pSize);
+        ctx.fillStyle = "#aaa"; ctx.font = `italic ${12 * UI_SCALE}px Arial`;
+        ctx.fillText("(Klik untuk ubah)", pSize + (35 * UI_SCALE), pSize + (20 * UI_SCALE));
 
         if (this.comingSoonTimer > 0) {
             ctx.fillStyle = "rgba(0,0,0,0.8)";
-            ctx.beginPath(); ctx.roundRect(SCREEN_W/2 - 150, SCREEN_H/2 + 100, 300, 60, 10); ctx.fill();
-            ctx.fillStyle = "yellow"; ctx.font = "bold 20px Arial"; ctx.textAlign="center";
-            ctx.fillText("COMING SOON!", SCREEN_W/2, SCREEN_H/2 + 130);
-            ctx.font = "14px Arial"; ctx.fillStyle = "white";
-            ctx.fillText("Mode Online sedang dikembangkan", SCREEN_W/2, SCREEN_H/2 + 150);
+            ctx.beginPath(); ctx.roundRect(SCREEN_W/2 - (150 * UI_SCALE), SCREEN_H/2 + (100 * UI_SCALE), 300 * UI_SCALE, 60 * UI_SCALE, 10 * UI_SCALE); ctx.fill();
+            ctx.fillStyle = "yellow"; ctx.font = `bold ${20 * UI_SCALE}px Arial`; ctx.textAlign="center";
+            ctx.fillText("COMING SOON!", SCREEN_W/2, SCREEN_H/2 + (130 * UI_SCALE));
+            ctx.font = `${14 * UI_SCALE}px Arial`; ctx.fillStyle = "white";
+            ctx.fillText("Mode Online sedang dikembangkan", SCREEN_W/2, SCREEN_H/2 + (150 * UI_SCALE));
         }
 
         ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
         ctx.textAlign="center"; ctx.textBaseline="alphabetic";
-        ctx.font = "14px Arial";
-        ctx.fillText("© 2025 UNO Game - By Lathif", SCREEN_W / 2, SCREEN_H - 20);
+        ctx.font = `${14 * UI_SCALE}px Arial`;
+        ctx.fillText("© 2025 UNO Game - By Lathif", SCREEN_W / 2, SCREEN_H - (20 * UI_SCALE));
     }
 
     drawColorPicker() {
         ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
-        ctx.fillStyle = "white"; ctx.font = "bold 40px Arial";
-        ctx.fillText("PILIH WARNA", SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.fillStyle = "white"; ctx.font = `bold ${40 * UI_SCALE}px Arial`;
+        ctx.fillText("PILIH WARNA", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
 
-        let size = 80; let gap = 20;
+        let size = 80 * UI_SCALE; let gap = 20 * UI_SCALE;
         let totalW = (size*4) + (gap*3);
         let startX = (SCREEN_W - totalW)/2;
         let startY = SCREEN_H/2 - size/2;
@@ -886,8 +928,8 @@ class Game {
             let bx = startX + i*(size+gap);
             ctx.fillStyle = COLORS[colors[i]];
             if (mouse.x >= bx && mouse.x <= bx+size && mouse.y >= startY && mouse.y <= startY+size) {
-                 ctx.strokeStyle = "white"; ctx.lineWidth = 5;
-                 ctx.strokeRect(bx-5, startY-5, size+10, size+10);
+                 ctx.strokeStyle = "white"; ctx.lineWidth = 5 * UI_SCALE;
+                 ctx.strokeRect(bx-(5*UI_SCALE), startY-(5*UI_SCALE), size+(10*UI_SCALE), size+(10*UI_SCALE));
             }
             ctx.fillRect(bx, startY, size, size);
         }
@@ -901,11 +943,11 @@ class Game {
         let color = (winner === 'human') ? COLORS.green : COLORS.red;
 
         ctx.fillStyle = color;
-        ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.font = `bold ${60 * UI_SCALE}px Arial`; ctx.textAlign = "center";
         ctx.fillText(msg, SCREEN_W/2, SCREEN_H/2);
         
-        ctx.fillStyle = "white"; ctx.font = "24px Arial";
-        ctx.fillText("Klik untuk main lagi", SCREEN_W/2, SCREEN_H/2 + 60);
+        ctx.fillStyle = "white"; ctx.font = `${24 * UI_SCALE}px Arial`;
+        ctx.fillText("Klik untuk main lagi", SCREEN_W/2, SCREEN_H/2 + (60 * UI_SCALE));
     }
     
     drawRoundedRect(x, y, w, h, r, color) {
@@ -953,7 +995,6 @@ window.addEventListener('keydown', (e) => {
         } else if (e.key === 'Enter') {
             if (game.tempInput.trim().length > 0) {
                 game.playerName = game.tempInput;
-                // Ganti warna avatar juga
                 const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
                 game.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
             }
@@ -968,6 +1009,16 @@ function loop() {
     if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         SCREEN_W = canvas.width; SCREEN_H = canvas.height;
+        
+        // --- LOGIKA SKALA UI UNTUK HP ---
+        // Jika layar kecil (<600px), skala dikecilkan.
+        // Faktor 0.6 untuk HP portrait biasa, 0.8 untuk tablet/landscape.
+        UI_SCALE = SCREEN_W < 600 ? 0.6 : (SCREEN_W < 1024 ? 0.8 : 1);
+        
+        // Update Ukuran Kartu Global
+        CARD_W = BASE_CARD_W * UI_SCALE;
+        CARD_H = BASE_CARD_H * UI_SCALE;
+        CARD_RADIUS = BASE_CARD_RADIUS * UI_SCALE;
     }
     game.update();
     game.draw();
