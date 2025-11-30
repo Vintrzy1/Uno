@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO Canvas - By Lathif</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * KONFIGURASI DAN VARIABEL GLOBAL
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let SCREEN_W = window.innerWidth;
+let SCREEN_H = window.innerHeight;
+
+const COLORS = {
+    red: '#ff5555',
+    blue: '#5555ff',
+    green: '#55aa55',
+    yellow: '#ffaa00',
+    black: '#1a1a1a', 
+    white: '#ffffff',
+    bg: '#1e3c72',
+    grey: '#555'
+};
+
+const CARD_W = 80;
+const CARD_H = 115;
+const CARD_RADIUS = 8;
+
+const STATE = {
+    MENU: 0,
+    PLAYING: 1,
+    COLOR_PICKER: 2,
+    GAME_OVER: 3
+};
+
+let currentState = STATE.MENU;
+let winner = null;
+
+const mouse = { x: 0, y: 0, down: false, clicked: false };
+
+/**
+ * KELAS CARD (KARTU)
+ */
+class Card {
+    constructor(color, value, type) {
+        this.color = color;
+        this.value = value;
+        this.type = type;
+        this.x = SCREEN_W / 2; 
+        this.y = SCREEN_H + 200;
+        this.isHovered = false;
+    }
+
+    draw(x, y, faceUp = true, scale = 1, dimmed = false, rotation = 0) {
+        this.x += (x - this.x) * 0.2;
+        this.y += (y - this.y) * 0.2;
+        
+        let drawScale = scale;
+        if (this.isHovered && faceUp && !dimmed && rotation === 0) {
+            y -= 30;
+            drawScale = 1.1;
+        }
+
+        ctx.save();
+        ctx.translate(this.x, (this.isHovered && rotation === 0 && !dimmed) ? y : this.y); 
+        ctx.rotate(rotation);
+        ctx.scale(drawScale, drawScale);
+
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 5;
+
+        this.drawRoundedRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS, COLORS.white);
+        
+        ctx.shadowColor = "transparent";
+
+        if (!faceUp) {
+            this.drawRoundedRect(-CARD_W/2 + 5, -CARD_H/2 + 5, CARD_W - 10, CARD_H - 10, CARD_RADIUS, COLORS.black);
+            ctx.fillStyle = COLORS.red;
+            ctx.font = "bold italic 30px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("UNO", 0, 0);
+        } else {
+            let mainColor = (this.color === 'black') ? COLORS.black : COLORS[this.color];
+            this.drawRoundedRect(-CARD_W/2 + 5, -CARD_H/2 + 5, CARD_W - 10, CARD_H - 10, CARD_RADIUS, mainColor);
+
+            if (this.type === 'wild' || this.type === 'wild4') {
+                this.drawWildFace();
+            } else {
+                this.drawNormalFace(mainColor);
+            }
+
+            if (dimmed) {
+                this.drawRoundedRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS, "rgba(0, 0, 0, 0.6)");
+            }
+        }
+        ctx.restore();
+    }
+
+    drawNormalFace(mainColor) {
+        ctx.save();
+        ctx.rotate(-25 * Math.PI / 180);
+        ctx.fillStyle = COLORS.white;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, CARD_W/1.8, CARD_H/3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = mainColor;
+        let displayVal = this.value;
+        if (displayVal === 'skip') displayVal = '⊘';
+        else if (displayVal === 'reverse') displayVal = '⇄';
+        
+        let fontSize = (displayVal.length > 1) ? 35 : 50;
+        ctx.font = `bold italic ${fontSize}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(displayVal, -2, 4);
+        ctx.restore();
+
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "left";
+        ctx.fillText(displayVal, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.save();
+        ctx.rotate(Math.PI);
+        ctx.fillText(displayVal, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.restore();
+    }
+
+    drawWildFace() {
+        let size = 30;
+        ctx.fillStyle = COLORS.red; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, Math.PI, 1.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
+        ctx.fillStyle = COLORS.blue; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 1.5*Math.PI, 0); ctx.lineTo(0,0); ctx.fill();
+        ctx.fillStyle = COLORS.green; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0, 0.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
+        ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0.5*Math.PI, Math.PI); ctx.lineTo(0,0); ctx.fill();
+
+        ctx.fillStyle = "black";
+        ctx.font = "bold italic 25px Arial";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        let val = (this.value === '+4') ? '+4' : ''; 
+        if(val) ctx.fillText(val, 2, 2);
+
+        ctx.fillStyle = COLORS.white;
+        ctx.font = "bold 14px Arial";
+        let cornerSym = (this.value === '+4') ? '+4' : 'W';
+        ctx.textAlign = "left";
+        ctx.fillText(cornerSym, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.save();
+        ctx.rotate(Math.PI);
+        ctx.fillText(cornerSym, -CARD_W/2 + 8, -CARD_H/2 + 18);
+        ctx.restore();
+    }
+
+    drawRoundedRect(x, y, w, h, r, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        ctx.fill();
+    }
+}
+
+/**
+ * ENGINE GAME
+ */
+class Game {
+    constructor() {
+        this.deck = [];
+        this.discardPile = [];
+        this.players = {}; 
+        this.turnOrder = [];
+        this.turnIndex = 0;
+        this.direction = 1;
+        
+        this.playerCount = 2; 
+        this.currentColor = ''; 
+        this.message = "Selamat Datang";
+        this.particles = [];
+        
+        // --- BUTTONS ---
+        this.btn2Player = { x: 0, y: 0, w: 200, h: 60, text: "2 PEMAIN" };
+        this.btn4Player = { x: 0, y: 0, w: 200, h: 60, text: "4 PEMAIN" };
+        this.btnOnline = { x: 0, y: 0, w: 200, h: 60, text: "MODE ONLINE" };
+        this.btnQuit = { x: 0, y: 0, w: 100, h: 40, text: "KELUAR" };
+        this.drawBtn = { x: 0, y: 0, w: 120, h: 45, text: "AMBIL" };
+
+        // --- STATE TAMBAHAN ---
+        this.comingSoonTimer = 0;
+        this.activeModal = null; // 'QUIT', 'PROFILE', null
+        this.tempInput = ""; // Menyimpan ketikan keyboard untuk profil
+
+        // --- PROFIL RANDOM PEMAIN ---
+        const randomNames = ["Lathif", "Player1", "Jagoan", "Tamu", "Budi", "Siti", "UnoPro"];
+        this.playerName = randomNames[Math.floor(Math.random() * randomNames.length)];
+        const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
+        this.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+
+        // --- PROFIL BOT ---
+        this.botProfiles = {};
+    }
+
+    startGame(count) {
+        this.playerCount = count;
+        this.createDeck();
+        this.shuffleDeck();
+        
+        this.players = {};
+        this.players['human'] = [];
+        
+        // GENERATE BOT PROFILES
+        this.botProfiles = {};
+        const botNamesList = ["Alex", "Sarah", "Mike", "Luna", "Rizky", "Dewi", "Budi", "Robot", "AI_01"];
+        const botColorsList = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow, COLORS.grey];
+        
+        let botIds = [];
+        if (count === 2) {
+            botIds = ['botTop'];
+            this.turnOrder = ['human', 'botTop'];
+        } else {
+            botIds = ['botLeft', 'botTop', 'botRight'];
+            this.turnOrder = ['human', 'botLeft', 'botTop', 'botRight'];
+        }
+
+        botIds.forEach((id, idx) => {
+            this.players[id] = [];
+            this.botProfiles[id] = {
+                name: botNamesList[Math.floor(Math.random() * botNamesList.length)],
+                color: botColorsList[idx % botColorsList.length]
+            };
+        });
+
+        this.deal();
+        
+        let first = this.deck.pop();
+        while(first.color === 'black') {
+            this.deck.unshift(first);
+            this.shuffleDeck();
+            first = this.deck.pop();
+        }
+        this.discardPile = [first];
+        this.currentColor = first.color;
+        
+        this.turnIndex = 0;
+        this.direction = 1;
+        currentState = STATE.PLAYING;
+        this.message = "Giliran Anda!";
+    }
+
+    createDeck() {
+        this.deck = [];
+        const colors = ['red', 'blue', 'green', 'yellow'];
+        const values = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+2', 'skip', 'reverse'];
+        
+        for (let c of colors) {
+            for (let v of values) {
+                this.deck.push(new Card(c, v, (v.length > 1 || isNaN(v)) ? 'action' : 'number'));
+                if (v !== '0') this.deck.push(new Card(c, v, (v.length > 1 || isNaN(v)) ? 'action' : 'number'));
+            }
+        }
+        for(let i=0; i<4; i++) {
+            this.deck.push(new Card('black', 'W', 'wild'));
+            this.deck.push(new Card('black', '+4', 'wild4'));
+        }
+    }
+
+    shuffleDeck() {
+        for (let i = this.deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
+        }
+    }
+
+    deal() {
+        for(let i=0; i<7; i++) {
+            for (let pid of this.turnOrder) {
+                this.players[pid].push(this.deck.pop());
+            }
+        }
+    }
+
+    drawCard(who, count=1) {
+        for(let i=0; i<count; i++) {
+            if (this.deck.length === 0) {
+                if (this.discardPile.length > 1) {
+                    let top = this.discardPile.pop();
+                    this.deck = [...this.discardPile];
+                    this.discardPile = [top];
+                    this.shuffleDeck();
+                    this.showMessage("Mengocok ulang...");
+                } else {
+                    this.showMessage("Kartu habis!"); return;
+                }
+            }
+            this.players[who].push(this.deck.pop());
+        }
+    }
+
+    getCurrentPlayer() {
+        return this.turnOrder[this.turnIndex];
+    }
+
+    update() {
+        // --- MODAL HANDLING (BLOCK EVERYTHING ELSE) ---
+        if (this.activeModal) {
+            if (mouse.clicked) {
+                this.handleModalClick();
+                mouse.clicked = false;
+            }
+            return; // STOP UPDATE jika ada modal
+        }
+
+        // --- MENU LOGIC ---
+        if (currentState === STATE.MENU) {
+            let cx = SCREEN_W/2;
+            let cy = SCREEN_H/2;
+            
+            this.btn2Player.x = cx - this.btn2Player.w - 10;
+            this.btn2Player.y = cy + 40;
+            this.btn4Player.x = cx + 10;
+            this.btn4Player.y = cy + 40;
+            this.btnOnline.x = cx - this.btnOnline.w / 2;
+            this.btnOnline.y = cy + 120;
+
+            if (this.comingSoonTimer > 0) this.comingSoonTimer--;
+
+            if (mouse.clicked) {
+                // KLIK PROFIL (EDIT) -> BUKA MODAL
+                let distProfile = Math.sqrt((mouse.x - 50)**2 + (mouse.y - 50)**2);
+                if (distProfile < 40 || (mouse.x > 50 && mouse.x < 250 && mouse.y > 20 && mouse.y < 80)) {
+                    this.activeModal = 'PROFILE';
+                    this.tempInput = this.playerName; // Isi awal
+                    mouse.clicked = false;
+                    return;
+                }
+
+                if (this.isMouseOver(this.btn2Player)) {
+                    this.startGame(2);
+                    mouse.clicked = false;
+                } else if (this.isMouseOver(this.btn4Player)) {
+                    this.startGame(4);
+                    mouse.clicked = false;
+                } else if (this.isMouseOver(this.btnOnline)) {
+                    this.comingSoonTimer = 120;
+                    mouse.clicked = false;
+                }
+            }
+            return;
+        }
+
+        if (currentState === STATE.GAME_OVER) {
+            this.updateParticles();
+            if(mouse.clicked) { currentState = STATE.MENU; mouse.clicked = false; }
+            return;
+        }
+
+        // --- PLAYING LOGIC ---
+        
+        // Tombol Keluar -> BUKA MODAL
+        this.btnQuit.x = SCREEN_W - this.btnQuit.w - 20;
+        this.btnQuit.y = 20;
+        if (mouse.clicked && this.isMouseOver(this.btnQuit)) {
+             this.activeModal = 'QUIT';
+             mouse.clicked = false;
+             return;
+        }
+
+        let currPlayer = this.getCurrentPlayer();
+
+        if (currPlayer !== 'human' && currentState === STATE.PLAYING && !this.botTimer) {
+            this.botTimer = setTimeout(() => this.botPlay(currPlayer), 1500);
+        }
+
+        if (currPlayer === 'human' && currentState === STATE.PLAYING) {
+            this.drawBtn.x = SCREEN_W / 2 + CARD_W + 40;
+            this.drawBtn.y = SCREEN_H - 120;
+
+            let hand = this.players.human;
+            let spacing = Math.min(50, (SCREEN_W - 100) / hand.length);
+            let startX = (SCREEN_W - (hand.length * spacing)) / 2 + spacing/2; 
+            let y = SCREEN_H - CARD_H/2 - 20;
+
+            let hoveredIndex = -1;
+            for (let i = hand.length - 1; i >= 0; i--) {
+                let cardX = startX + i * spacing;
+                if (mouse.x >= cardX - CARD_W/2 && mouse.x <= cardX + CARD_W/2 &&
+                    mouse.y >= y - CARD_H/2 && mouse.y <= y + CARD_H/2 && hoveredIndex === -1) {
+                    hand[i].isHovered = true;
+                    hoveredIndex = i;
+                } else {
+                    hand[i].isHovered = false;
+                }
+            }
+
+            if (mouse.clicked) {
+                if (hoveredIndex !== -1) {
+                    this.humanPlay(hoveredIndex);
+                } else {
+                    let deckX = SCREEN_W / 2 - CARD_W - 20;
+                    let deckY = SCREEN_H / 2;
+                    let clickedDeck = (mouse.x >= deckX - CARD_W/2 && mouse.x <= deckX + CARD_W/2 &&
+                                     mouse.y >= deckY - CARD_H/2 && mouse.y <= deckY + CARD_H/2);
+                    let clickedBtn = this.isMouseOver(this.drawBtn);
+
+                    if (clickedDeck || clickedBtn) {
+                        this.showMessage("Mengambil kartu...");
+                        this.drawCard('human');
+                        setTimeout(() => this.nextTurn(), 500);
+                    }
+                }
+                mouse.clicked = false;
+            }
+        }
+
+        if (currentState === STATE.COLOR_PICKER && this.getCurrentPlayer() === 'human') {
+            this.handleColorPickerInput();
+        }
+    }
+
+    isMouseOver(btn) {
+        return mouse.x >= btn.x && mouse.x <= btn.x + btn.w && mouse.y >= btn.y && mouse.y <= btn.y + btn.h;
+    }
+
+    isValidMove(card) {
+        let top = this.discardPile[this.discardPile.length-1];
+        if (card.color === 'black') return true;
+        if (card.color === this.currentColor) return true;
+        if (card.value === top.value) return true;
+        return false;
+    }
+
+    humanPlay(index) {
+        let card = this.players.human[index];
+        if (this.isValidMove(card)) {
+            this.discardPile.push(card);
+            this.players.human.splice(index, 1);
+            if (card.color === 'black') {
+                currentState = STATE.COLOR_PICKER;
+                this.pendingCard = card;
+            } else {
+                this.currentColor = card.color;
+                this.handleSpecialCard(card);
+            }
+        } else {
+            this.showMessage("Kartu tidak cocok!");
+        }
+    }
+
+    botPlay(playerId) {
+        this.botTimer = null;
+        let hand = this.players[playerId];
+        let validIndices = [];
+        for(let i=0; i<hand.length; i++) {
+            if (this.isValidMove(hand[i])) validIndices.push(i);
+        }
+
+        if (validIndices.length > 0) {
+            let index = validIndices[Math.floor(Math.random() * validIndices.length)];
+            let card = hand[index];
+            this.discardPile.push(card);
+            hand.splice(index, 1);
+            if (card.color === 'black') {
+                const colors = ['red', 'blue', 'green', 'yellow'];
+                let counts = {red:0, blue:0, green:0, yellow:0};
+                hand.forEach(c => { if(c.color !== 'black') counts[c.color]++; });
+                let bestColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+                this.currentColor = bestColor;
+                this.showMessage(`${this.getPlayerName(playerId)} memilih ${bestColor.toUpperCase()}`);
+                this.handleSpecialCard(card);
+            } else {
+                this.currentColor = card.color;
+                this.handleSpecialCard(card);
+            }
+        } else {
+            this.showMessage(`${this.getPlayerName(playerId)} mengambil kartu`);
+            this.drawCard(playerId);
+            this.nextTurn();
+        }
+    }
+
+    handleSpecialCard(card) {
+        let currP = this.getCurrentPlayer();
+        if (this.players[currP].length === 0) {
+            currentState = STATE.GAME_OVER;
+            winner = currP;
+            this.createParticles(); 
+            return;
+        }
+
+        if (card.value === 'reverse') {
+            if (this.playerCount === 2) {
+                this.showMessage("REVERSE (SKIP)!");
+                 if(this.getCurrentPlayer() !== 'human') { 
+                     this.botTimer = setTimeout(() => this.botPlay(currP), 1500);
+                 }
+            } else {
+                this.direction *= -1;
+                this.showMessage("ARAH BERBALIK!");
+                this.nextTurn();
+            }
+        } else if (card.value === 'skip') {
+            this.showMessage("SKIP!");
+            this.nextTurn(true); 
+        } else if (card.value === '+2') {
+            let nextIdx = (this.turnIndex + this.direction + this.turnOrder.length) % this.turnOrder.length;
+            let victim = this.turnOrder[nextIdx];
+            this.showMessage(`+2 untuk ${this.getPlayerName(victim)}!`);
+            this.drawCard(victim, 2);
+            this.nextTurn(true); 
+        } else if (card.value === '+4') {
+            let nextIdx = (this.turnIndex + this.direction + this.turnOrder.length) % this.turnOrder.length;
+            let victim = this.turnOrder[nextIdx];
+             this.showMessage(`+4 untuk ${this.getPlayerName(victim)}!`);
+             this.drawCard(victim, 4);
+             this.nextTurn(true);
+        } else {
+            this.nextTurn();
+        }
+    }
+
+    nextTurn(skipOne = false) {
+        if (currentState === STATE.GAME_OVER) return;
+
+        let steps = skipOne ? 2 : 1;
+        this.turnIndex = (this.turnIndex + (steps * this.direction)) % this.turnOrder.length;
+        if (this.turnIndex < 0) this.turnIndex += this.turnOrder.length;
+
+        let nextP = this.getCurrentPlayer();
+        this.message = (nextP === 'human') ? "Giliran Anda!" : `Giliran ${this.getPlayerName(nextP)}...`;
+    }
+
+    getPlayerName(id) {
+        if (id === 'human') return this.playerName || 'Anda'; 
+        if (this.botProfiles[id]) return this.botProfiles[id].name;
+        return id;
+    }
+
+    handleColorPickerInput() {
+        let size = 80; let gap = 20;
+        let totalW = (size*4) + (gap*3);
+        let startX = (SCREEN_W - totalW)/2;
+        let startY = SCREEN_H/2 - size/2;
+        const colors = ['red', 'blue', 'green', 'yellow'];
+
+        if (mouse.clicked) {
+            for(let i=0; i<4; i++) {
+                let bx = startX + i*(size+gap);
+                if (mouse.x >= bx && mouse.x <= bx+size && mouse.y >= startY && mouse.y <= startY+size) {
+                    this.currentColor = colors[i];
+                    currentState = STATE.PLAYING;
+                    this.handleSpecialCard(this.pendingCard);
+                    mouse.clicked = false; return;
+                }
+            }
+        }
+    }
+
+    handleModalClick() {
+        // Koordinat Modal (Center)
+        let w = 400, h = 200;
+        let x = SCREEN_W/2 - w/2;
+        let y = SCREEN_H/2 - h/2;
+
+        let btnW = 120, btnH = 40;
+        let btnY = y + h - 60;
+        let btn1X = x + 50; 
+        let btn2X = x + w - 50 - btnW;
+
+        if (this.activeModal === 'QUIT') {
+            // Tombol YA
+            if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
+                currentState = STATE.MENU;
+                this.activeModal = null;
+            }
+            // Tombol TIDAK
+            else if (mouse.x >= btn2X && mouse.x <= btn2X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
+                this.activeModal = null;
+            }
+        } else if (this.activeModal === 'PROFILE') {
+            // Tombol SIMPAN
+            if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
+                if (this.tempInput.trim().length > 0) {
+                    this.playerName = this.tempInput.substr(0, 12);
+                    // Ganti warna avatar
+                    const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
+                    this.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+                }
+                this.activeModal = null;
+            }
+            // Tombol BATAL
+            else if (mouse.x >= btn2X && mouse.x <= btn2X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
+                this.activeModal = null;
+            }
+        }
+    }
+
+    showMessage(text) { this.message = text; }
+
+    draw() {
+        let grad = ctx.createRadialGradient(SCREEN_W/2, SCREEN_H/2, 100, SCREEN_W/2, SCREEN_H/2, 800);
+        grad.addColorStop(0, '#2c3e50'); grad.addColorStop(1, '#000');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+
+        if (currentState === STATE.MENU) { 
+            this.drawMenu(); 
+            if (this.activeModal) this.drawModal();
+            return; 
+        }
+
+        ctx.beginPath(); ctx.arc(SCREEN_W/2, SCREEN_H/2, 160, 0, Math.PI*2);
+        ctx.strokeStyle = COLORS[this.currentColor] || '#333';
+        ctx.lineWidth = 10; ctx.stroke();
+        
+        if (this.playerCount === 4) {
+           ctx.save();
+           ctx.translate(SCREEN_W/2, SCREEN_H/2);
+           ctx.rotate((this.direction === 1) ? 0 : Math.PI); 
+           ctx.fillStyle = "rgba(255,255,255,0.1)";
+           ctx.font = "100px Arial"; ctx.textAlign = "center"; ctx.textBaseline="middle";
+           ctx.fillText("↻", 0, 0);
+           ctx.restore();
+        }
+
+        let centerX = SCREEN_W/2; let centerY = SCREEN_H/2;
+
+        if (this.discardPile.length > 0) {
+            let top = this.discardPile[this.discardPile.length - 1];
+            top.x = centerX + 15; top.y = centerY;
+            top.draw(top.x, top.y, true);
+        }
+
+        let deckX = centerX - CARD_W - 15; let deckY = centerY;
+        for(let i=0; i<Math.min(5, this.deck.length); i++) {
+            let dummy = new Card('black', '', '');
+            dummy.draw(deckX - i*2, deckY - i*2, false);
+        }
+
+        // --- RENDER PLAYERS ---
+        this.drawHand('human', SCREEN_W/2, SCREEN_H - CARD_H/2 - 20, 0);
+        this.drawHand('botTop', SCREEN_W/2, CARD_H/2 + 20, Math.PI);
+
+        if (this.playerCount === 4) {
+            this.drawHand('botLeft', CARD_H/2 + 20, SCREEN_H/2, Math.PI/2);
+            this.drawHand('botRight', SCREEN_W - CARD_H/2 - 20, SCREEN_H/2, -Math.PI/2);
+        }
+
+        ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+        ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
+        ctx.fillText(this.message, SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.shadowColor = "transparent";
+
+        if (this.getCurrentPlayer() === 'human') {
+            ctx.fillStyle = "white"; ctx.font = "bold 14px Arial";
+            ctx.fillText("DECK", deckX, deckY - CARD_H/2 - 10);
+
+            let btn = this.drawBtn;
+            let isHover = (mouse.x >= btn.x && mouse.x <= btn.x+btn.w && mouse.y >= btn.y && mouse.y <= btn.y+btn.h);
+            this.drawRoundedRect(btn.x, btn.y, btn.w, btn.h, 10, isHover ? "#eee" : "white");
+            ctx.fillStyle = "#333"; ctx.font = "bold 18px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
+        }
+
+        // --- TOMBOL KELUAR ---
+        let qBtn = this.btnQuit;
+        let qHover = (mouse.x >= qBtn.x && mouse.x <= qBtn.x+qBtn.w && mouse.y >= qBtn.y && mouse.y <= qBtn.y+qBtn.h);
+        this.drawRoundedRect(qBtn.x, qBtn.y, qBtn.w, qBtn.h, 5, qHover ? "#ff5555" : "rgba(255,255,255,0.2)");
+        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(qBtn.text, qBtn.x + qBtn.w/2, qBtn.y + qBtn.h/2);
+
+        if (currentState === STATE.COLOR_PICKER) this.drawColorPicker();
+        if (currentState === STATE.GAME_OVER) this.drawGameOver();
+        
+        // MODAL (Pop-up)
+        if (this.activeModal) this.drawModal();
+    }
+
+    drawModal() {
+        // Overlay Hitam
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0,0, SCREEN_W, SCREEN_H);
+
+        let w = 400, h = 200;
+        let x = SCREEN_W/2 - w/2;
+        let y = SCREEN_H/2 - h/2;
+
+        // Kotak Modal
+        ctx.shadowColor = "black"; ctx.shadowBlur = 20;
+        ctx.fillStyle = "#333";
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 15); ctx.fill();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.shadowColor = "transparent";
+
+        // Konten
+        ctx.fillStyle = "white"; ctx.textAlign = "center";
+        
+        if (this.activeModal === 'QUIT') {
+            ctx.font = "bold 24px Arial";
+            ctx.fillText("Keluar Permainan?", SCREEN_W/2, y + 50);
+            ctx.font = "18px Arial";
+            ctx.fillText("Kamu yakin? Nanti kamu akan kalah loh", SCREEN_W/2, y + 90);
+
+            // Tombol
+            this.drawModalBtn("YA", x + 50, y + h - 60, "#ff5555");
+            this.drawModalBtn("TIDAK", x + w - 170, y + h - 60, "#55aa55");
+        } 
+        else if (this.activeModal === 'PROFILE') {
+            ctx.font = "bold 24px Arial";
+            ctx.fillText("Ubah Nama Profil", SCREEN_W/2, y + 40);
+
+            // Input Box visual
+            ctx.fillStyle = "white";
+            ctx.fillRect(x + 50, y + 60, w - 100, 40);
+            ctx.fillStyle = "black"; ctx.font = "20px Arial"; ctx.textAlign="left";
+            ctx.fillText(this.tempInput + "|", x + 60, y + 87); // Cursor |
+
+            // Tombol
+            this.drawModalBtn("SIMPAN", x + 50, y + h - 60, "#5555ff");
+            this.drawModalBtn("BATAL", x + w - 170, y + h - 60, "#ff5555");
+        }
+    }
+
+    drawModalBtn(text, x, y, color) {
+        let w = 120, h = 40;
+        let isHover = (mouse.x >= x && mouse.x <= x+w && mouse.y >= y && mouse.y <= y+h);
+        
+        ctx.fillStyle = isHover ? "white" : color;
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
+        
+        ctx.fillStyle = isHover ? color : "white";
+        ctx.font = "bold 16px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(text, x + w/2, y + h/2);
+    }
+
+    drawHand(playerId, centerX, centerY, rotation) {
+        let hand = this.players[playerId];
+        let count = hand.length;
+        if (count === 0) return;
+
+        let spacing = 30;
+        if (playerId === 'human') spacing = Math.min(50, (SCREEN_W - 100) / count);
+        else spacing = Math.min(20, 200 / count);
+
+        let totalW = (count - 1) * spacing;
+        
+        if (playerId === 'human') {
+            for (let i = 0; i < count; i++) {
+                let offset = (i * spacing) - (totalW / 2);
+                let card = hand[i];
+                let dimmed = (this.getCurrentPlayer() === 'human' && !this.isValidMove(card));
+                card.draw(centerX + offset, centerY, true, 1, dimmed, 0);
+            }
+            return;
+        }
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation);
+
+        let avatarY = CARD_H/2 + 45; 
+        let avatarSize = 20;
+        
+        let profileColor = this.botProfiles[playerId] ? this.botProfiles[playerId].color : COLORS.grey;
+        ctx.beginPath(); ctx.arc(0, avatarY, avatarSize, 0, Math.PI*2);
+        ctx.fillStyle = profileColor; ctx.fill();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
+
+        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        let name = this.getPlayerName(playerId);
+        ctx.fillText(name.charAt(0).toUpperCase(), 0, avatarY);
+
+        ctx.fillStyle = (this.getCurrentPlayer() === playerId) ? "#ffff00" : "white";
+        ctx.font = "bold 16px Arial"; 
+        ctx.fillText(`${name} (${count})`, 0, avatarY + 30);
+
+        for (let i = 0; i < count; i++) {
+            let offset = (i * spacing) - (totalW / 2);
+            this.drawBotCard(offset, 0);
+        }
+        ctx.restore();
+    }
+    
+    drawBotCard(x, y) {
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowBlur = 5;
+        ctx.fillStyle = "white";
+        ctx.beginPath(); ctx.roundRect(x - CARD_W/2, y - CARD_H/2, CARD_W, CARD_H, CARD_RADIUS); ctx.fill();
+        ctx.fillStyle = COLORS.black;
+        ctx.beginPath(); ctx.roundRect(x - CARD_W/2 + 4, y - CARD_H/2 + 4, CARD_W - 8, CARD_H - 8, CARD_RADIUS); ctx.fill();
+        ctx.fillStyle = COLORS.red;
+        ctx.font = "bold 20px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("UNO", x, y);
+        ctx.shadowColor = "transparent";
+    }
+
+    drawMenu() {
+        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        
+        ctx.shadowColor = "black"; ctx.shadowBlur = 10;
+        ctx.fillStyle = "#ff5555";
+        ctx.font = "bold italic 100px Arial"; ctx.textAlign = "center";
+        ctx.fillText("UNO", SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4;
+        ctx.strokeText("UNO", SCREEN_W/2, SCREEN_H/2 - 100);
+        ctx.shadowColor = "transparent";
+
+        let b2 = this.btn2Player;
+        let h2 = this.isMouseOver(b2);
+        this.drawRoundedRect(b2.x, b2.y, b2.w, b2.h, 10, h2 ? "#ffaa00" : COLORS.blue);
+        ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.textBaseline="middle";
+        ctx.fillText(b2.text, b2.x + b2.w/2, b2.y + b2.h/2);
+
+        let b4 = this.btn4Player;
+        let h4 = this.isMouseOver(b4);
+        this.drawRoundedRect(b4.x, b4.y, b4.w, b4.h, 10, h4 ? "#ffaa00" : COLORS.green);
+        ctx.fillStyle = "white"; 
+        ctx.fillText(b4.text, b4.x + b4.w/2, b4.y + b4.h/2);
+
+        let bOn = this.btnOnline;
+        let hOn = this.isMouseOver(bOn);
+        this.drawRoundedRect(bOn.x, bOn.y, bOn.w, bOn.h, 10, hOn ? "#aaa" : COLORS.grey);
+        ctx.fillStyle = "white";
+        ctx.fillText(bOn.text, bOn.x + bOn.w/2, bOn.y + bOn.h/2);
+
+        let pX = 50, pY = 50, pR = 25;
+        ctx.beginPath(); ctx.arc(pX, pY, pR, 0, Math.PI*2);
+        ctx.fillStyle = this.playerAvatarColor;
+        ctx.fill(); 
+        ctx.lineWidth=2; ctx.strokeStyle="white"; ctx.stroke();
+        
+        ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        let initial = this.playerName.charAt(0).toUpperCase();
+        ctx.fillText(initial, pX, pY);
+
+        ctx.textAlign="left"; ctx.font = "bold 20px Arial";
+        ctx.fillText(this.playerName, pX + 35, pY);
+        ctx.fillStyle = "#aaa"; ctx.font = "italic 12px Arial";
+        ctx.fillText("(Klik untuk ubah)", pX + 35, pY + 20);
+
+        if (this.comingSoonTimer > 0) {
+            ctx.fillStyle = "rgba(0,0,0,0.8)";
+            ctx.beginPath(); ctx.roundRect(SCREEN_W/2 - 150, SCREEN_H/2 + 100, 300, 60, 10); ctx.fill();
+            ctx.fillStyle = "yellow"; ctx.font = "bold 20px Arial"; ctx.textAlign="center";
+            ctx.fillText("COMING SOON!", SCREEN_W/2, SCREEN_H/2 + 130);
+            ctx.font = "14px Arial"; ctx.fillStyle = "white";
+            ctx.fillText("Mode Online sedang dikembangkan", SCREEN_W/2, SCREEN_H/2 + 150);
+        }
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+        ctx.font = "14px Arial";
+        ctx.fillText("© 2025 UNO Game - By Lathif", SCREEN_W / 2, SCREEN_H - 20);
+    }
+
+    drawColorPicker() {
+        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        ctx.fillStyle = "white"; ctx.font = "bold 40px Arial";
+        ctx.fillText("PILIH WARNA", SCREEN_W/2, SCREEN_H/2 - 100);
+
+        let size = 80; let gap = 20;
+        let totalW = (size*4) + (gap*3);
+        let startX = (SCREEN_W - totalW)/2;
+        let startY = SCREEN_H/2 - size/2;
+        const colors = ['red', 'blue', 'green', 'yellow'];
+
+        for(let i=0; i<4; i++) {
+            let bx = startX + i*(size+gap);
+            ctx.fillStyle = COLORS[colors[i]];
+            if (mouse.x >= bx && mouse.x <= bx+size && mouse.y >= startY && mouse.y <= startY+size) {
+                 ctx.strokeStyle = "white"; ctx.lineWidth = 5;
+                 ctx.strokeRect(bx-5, startY-5, size+10, size+10);
+            }
+            ctx.fillRect(bx, startY, size, size);
+        }
+    }
+
+    drawGameOver() {
+        this.drawParticles();
+        ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        
+        let msg = (winner === 'human') ? "ANDA MENANG!" : `${this.getPlayerName(winner).toUpperCase()} MENANG!`;
+        let color = (winner === 'human') ? COLORS.green : COLORS.red;
+
+        ctx.fillStyle = color;
+        ctx.font = "bold 60px Arial"; ctx.textAlign = "center";
+        ctx.fillText(msg, SCREEN_W/2, SCREEN_H/2);
+        
+        ctx.fillStyle = "white"; ctx.font = "24px Arial";
+        ctx.fillText("Klik untuk main lagi", SCREEN_W/2, SCREEN_H/2 + 60);
+    }
+    
+    drawRoundedRect(x, y, w, h, r, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+        ctx.fill();
+    }
+
+    createParticles() {
+        for(let i=0; i<150; i++) {
+            this.particles.push({
+                x: SCREEN_W/2, y: SCREEN_H/2,
+                vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20,
+                color: Object.values(COLORS)[Math.floor(Math.random()*4)],
+                life: 1.0, size: Math.random()*10+5
+            });
+        }
+    }
+    updateParticles() {
+        for(let p of this.particles) {
+            p.x += p.vx; p.y += p.vy; p.vy += 0.5; p.life -= 0.01;
+        }
+    }
+    drawParticles() {
+        for(let p of this.particles) {
+            if(p.life > 0) {
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            }
+        }
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+const game = new Game();
+
+// Keyboard Listener untuk Edit Profil
+window.addEventListener('keydown', (e) => {
+    if (game.activeModal === 'PROFILE') {
+        if (e.key === 'Backspace') {
+            game.tempInput = game.tempInput.slice(0, -1);
+        } else if (e.key.length === 1 && game.tempInput.length < 12) {
+            game.tempInput += e.key;
+        } else if (e.key === 'Enter') {
+            if (game.tempInput.trim().length > 0) {
+                game.playerName = game.tempInput;
+                // Ganti warna avatar juga
+                const avatarColors = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow];
+                game.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+            }
+            game.activeModal = null;
+        } else if (e.key === 'Escape') {
+            game.activeModal = null;
+        }
+    }
+});
+
+function loop() {
+    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        SCREEN_W = canvas.width; SCREEN_H = canvas.height;
+    }
+    game.update();
+    game.draw();
+    mouse.clicked = false; 
+    requestAnimationFrame(loop);
+}
+
+canvas.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener('mousedown', () => { mouse.down = true; mouse.clicked = true; });
+canvas.addEventListener('mouseup', () => { mouse.down = false; });
+canvas.addEventListener('touchstart', (e) => {
+    mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY;
+    mouse.down = true; mouse.clicked = true; e.preventDefault();
+}, {passive: false});
+
+loop();
+
+</script>
+</body>
+</html>
