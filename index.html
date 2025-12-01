@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UNO Canvas - By Lathif</title>
+    <title>UNO GAMES - By Lathif</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #222;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            /* Mencegah seleksi teks dan zoom di HP */
             -webkit-user-select: none;
             user-select: none;
             touch-action: none; 
@@ -51,7 +50,7 @@ const BASE_CARD_W = 80;
 const BASE_CARD_H = 115;
 const BASE_CARD_RADIUS = 8;
 
-// VARIABEL DINAMIS (Akan berubah sesuai ukuran layar)
+// VARIABEL DINAMIS
 let UI_SCALE = 1; 
 let CARD_W = BASE_CARD_W;
 let CARD_H = BASE_CARD_H;
@@ -66,33 +65,90 @@ const STATE = {
 
 let currentState = STATE.MENU;
 let winner = null;
-
 const mouse = { x: 0, y: 0, down: false, clicked: false };
 
+// --- VARIABEL IKLAN ---
+let interstitialAd = null;
+let isAdLoading = false;
+
 /**
- * LOGIKA IKLAN APK (ADMOB)
- * Iklan Web dihapus, sisa logika native untuk APK
+ * LOGIKA IKLAN APK (ADMOB) - DIPERBARUI
  */
 async function onDeviceReady() {
     console.log("Device Ready. Memulai AdMob...");
     
     if (navigator.connection && navigator.connection.type === 'none') {
         console.log("Offline: Iklan tidak ditampilkan.");
-        return;
     }
 
     if (typeof admob !== 'undefined') {
         try {
             await admob.start();
+            
+            // 1. TAMPILKAN BANNER (Bawah)
             const banner = new admob.BannerAd({
-                // Ganti dengan Unit ID Banner yang benar (format ca-app-pub-xxx/xxx)
-                adUnitId: 'ca-app-pub-4389289343937853~6056570637', // Ini App ID dari user (sebagai placeholder)
+                adUnitId: 'ca-app-pub-4389289343937853/8974663429', 
                 position: 'bottom'
             });
-            await banner.show();
+            // Tampilkan banner, tangani error jika gagal
+            banner.show().catch(e => console.error("Banner error:", e));
+
+            // 2. SIAPKAN INTERSTITIAL PERTAMA KALI
+            loadInterstitial();
+
         } catch (e) {
-            console.error("AdMob Error:", e);
+            console.error("AdMob Init Error:", e);
         }
+    }
+}
+
+// Fungsi Memuat Iklan Interstitial (DENGAN RETRY)
+async function loadInterstitial() {
+    if (typeof admob === 'undefined') return;
+    if (interstitialAd) return; // Sudah ada iklan siap/sedang memuat
+    if (isAdLoading) return; // Sedang proses memuat
+
+    isAdLoading = true;
+    console.log("Memuat Iklan Interstitial...");
+
+    try {
+        const ad = new admob.InterstitialAd({
+            adUnitId: 'ca-app-pub-4389289343937853/9633031171' 
+        });
+
+        await ad.load();
+        
+        // Sukses dimuat
+        interstitialAd = ad;
+        isAdLoading = false;
+        console.log("Iklan Interstitial SIAP ditampilkan.");
+
+    } catch (e) {
+        console.error("Gagal memuat Interstitial (Mencoba lagi 10d):", e);
+        interstitialAd = null;
+        isAdLoading = false;
+        // Coba lagi setelah 10 detik jika gagal (misal sinyal jelek atau no fill)
+        setTimeout(loadInterstitial, 10000);
+    }
+}
+
+// Fungsi Menampilkan Iklan Interstitial
+async function showInterstitialAd() {
+    if (interstitialAd) {
+        try {
+            await interstitialAd.show();
+            // Setelah ditampilkan, kosongkan variabel agar bisa load yang baru
+            interstitialAd = null;
+            // Load iklan berikutnya untuk nanti
+            setTimeout(loadInterstitial, 2000); 
+        } catch (e) {
+            console.error("Gagal menampilkan iklan:", e);
+            interstitialAd = null;
+            loadInterstitial(); // Coba load lagi
+        }
+    } else {
+        console.log("Iklan belum siap. Memuat ulang...");
+        loadInterstitial(); // Pancing load jika belum ada
     }
 }
 
@@ -119,7 +175,6 @@ class Card {
         this.y += (y - this.y) * 0.2;
         
         let drawScale = scale;
-        // Hover effect dikurangi di mobile agar tidak terlalu lompat
         let hoverLift = (UI_SCALE < 0.8) ? 15 : 30;
 
         if (this.isHovered && faceUp && !dimmed && rotation === 0) {
@@ -247,7 +302,6 @@ class Game {
         this.message = "Selamat Datang";
         this.particles = [];
         
-        // Button dimensions will be scaled dynamically in update()
         this.btn2Player = { text: "2 PEMAIN" };
         this.btn4Player = { text: "4 PEMAIN" };
         this.btnOnline = { text: "MODE ONLINE" };
@@ -366,7 +420,6 @@ class Game {
     }
 
     update() {
-        // Update Button Sizes based on UI_SCALE
         let btnW = 200 * UI_SCALE;
         let btnH = 60 * UI_SCALE;
         this.btn2Player.w = btnW; this.btn2Player.h = btnH;
@@ -401,7 +454,6 @@ class Game {
             if (mouse.clicked) {
                 let pSize = 50 * UI_SCALE;
                 let distProfile = Math.sqrt((mouse.x - pSize)**2 + (mouse.y - pSize)**2);
-                // Area klik profil scaled
                 if (distProfile < (40*UI_SCALE) || (mouse.x > pSize && mouse.x < (250*UI_SCALE) && mouse.y > (20*UI_SCALE) && mouse.y < (80*UI_SCALE))) {
                     this.activeModal = 'PROFILE';
                     this.tempInput = this.playerName; 
@@ -425,7 +477,12 @@ class Game {
 
         if (currentState === STATE.GAME_OVER) {
             this.updateParticles();
-            if(mouse.clicked) { currentState = STATE.MENU; mouse.clicked = false; }
+            if(mouse.clicked) { 
+                // IKLAN: Muncul saat Game Over dan klik kembali
+                showInterstitialAd(); 
+                currentState = STATE.MENU; 
+                mouse.clicked = false; 
+            }
             return;
         }
 
@@ -448,7 +505,6 @@ class Game {
             this.drawBtn.y = SCREEN_H - (120 * UI_SCALE);
 
             let hand = this.players.human;
-            // Spacing responsive
             let spacing = Math.min(50 * UI_SCALE, (SCREEN_W - (100 * UI_SCALE)) / hand.length);
             let startX = (SCREEN_W - (hand.length * spacing)) / 2 + spacing/2; 
             let y = SCREEN_H - CARD_H/2 - (20 * UI_SCALE);
@@ -556,6 +612,10 @@ class Game {
         if (this.players[currP].length === 0) {
             currentState = STATE.GAME_OVER;
             winner = currP;
+            
+            // IKLAN: Saat game selesai (menang/kalah)
+            showInterstitialAd();
+            
             this.createParticles(); 
             return;
         }
@@ -641,6 +701,8 @@ class Game {
 
         if (this.activeModal === 'QUIT') {
             if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
+                // IKLAN: Muncul saat keluar dari game (menyerah)
+                showInterstitialAd();
                 currentState = STATE.MENU;
                 this.activeModal = null;
             }
@@ -694,9 +756,7 @@ class Game {
         if (this.discardPile.length > 0) {
             let top = this.discardPile[this.discardPile.length - 1];
             top.x = centerX + (15 * UI_SCALE); top.y = centerY;
-            top.draw(top.x, top.y, true, 1, false, 0); // Scale is applied inside card.draw via coords, but card.draw needs to know rotation.
-            // Wait, card.draw scales using ctx.scale(drawScale). We need base scale there?
-            // Actually I modified Card.draw to use global CARD_W. So scale=1 is fine.
+            top.draw(top.x, top.y, true, 1, false, 0); 
         }
 
         let deckX = centerX - CARD_W - (15 * UI_SCALE); let deckY = centerY;
