@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UNO GAMES - By Lathif</title>
+    <title>UNO CARD GAMES</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #222;
+            background-color: #1a2b3c;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             -webkit-user-select: none;
             user-select: none;
@@ -26,6 +26,76 @@
 
 <script>
 /**
+ * KAMUS BAHASA
+ */
+const LANG = {
+    ID: {
+        play_2: "2 PEMAIN",
+        play_4: "4 PEMAIN",
+        online: "MODE ONLINE",
+        quit: "KELUAR",
+        draw: "AMBIL",
+        deck: "DECK",
+        turn_you: "Giliran Anda!",
+        turn_bot: "Giliran ",
+        win_you: "ANDA MENANG!",
+        win_bot_prefix: "", 
+        win_bot_suffix: " MENANG!",
+        color_pick: "PILIH WARNA",
+        coming_soon: "SEGERA HADIR!",
+        coming_soon_desc: "Mode Online sedang dikembangkan",
+        profile_hint: "(Klik untuk ubah)",
+        quit_title: "Keluar Permainan?",
+        quit_msg: "Kamu yakin? Nanti kamu akan kalah loh.",
+        profile_title: "Ubah Nama Profil",
+        btn_yes: "YA",
+        btn_no: "TIDAK",
+        btn_save: "SIMPAN",
+        btn_cancel: "BATAL",
+        bot_pick: "memilih",
+        bot_draw: "mengambil kartu",
+        skip: "SKIP!",
+        reverse: "ARAH BERBALIK!",
+        reverse_skip: "REVERSE (SKIP)!",
+        plus2: "+2 untuk",
+        plus4: "+4 untuk",
+        no_move: "Tidak ada kartu cocok! Ambil kartu."
+    },
+    EN: {
+        play_2: "2 PLAYERS",
+        play_4: "4 PLAYERS",
+        online: "ONLINE MODE",
+        quit: "EXIT",
+        draw: "DRAW",
+        deck: "DECK",
+        turn_you: "Your Turn!",
+        turn_bot: "'s Turn",
+        win_you: "YOU WON!",
+        win_bot_prefix: "",
+        win_bot_suffix: " WON!",
+        color_pick: "CHOOSE COLOR",
+        coming_soon: "COMING SOON!",
+        coming_soon_desc: "Online Mode is under development",
+        profile_hint: "(Click to edit)",
+        quit_title: "Quit Game?",
+        quit_msg: "Are you sure? You will lose the game.",
+        profile_title: "Change Profile Name",
+        btn_yes: "YES",
+        btn_no: "NO",
+        btn_save: "SAVE",
+        btn_cancel: "CANCEL",
+        bot_pick: "chose",
+        bot_draw: "drew a card",
+        skip: "SKIP!",
+        reverse: "REVERSE!",
+        reverse_skip: "REVERSE (SKIP)!",
+        plus2: "+2 for",
+        plus4: "+4 for",
+        no_move: "No valid cards! Draw a card."
+    }
+};
+
+/**
  * KONFIGURASI DAN VARIABEL GLOBAL
  */
 const canvas = document.getElementById('gameCanvas');
@@ -39,10 +109,12 @@ const COLORS = {
     blue: '#5555ff',
     green: '#55aa55',
     yellow: '#ffaa00',
-    black: '#1a1a1a', 
+    black: '#222', 
     white: '#ffffff',
-    bg: '#1e3c72',
-    grey: '#555'
+    grey: '#555',
+    gold: '#ffd700',
+    dark_bg: '#1e3c72',
+    btn_shadow: 'rgba(0,0,0,0.3)'
 };
 
 // UKURAN DASAR (Desktop)
@@ -60,7 +132,8 @@ const STATE = {
     MENU: 0,
     PLAYING: 1,
     COLOR_PICKER: 2,
-    GAME_OVER: 3
+    GAME_OVER: 3,
+    ANIMATING: 4 
 };
 
 let currentState = STATE.MENU;
@@ -71,90 +144,142 @@ const mouse = { x: 0, y: 0, down: false, clicked: false };
 let interstitialAd = null;
 let isAdLoading = false;
 
-/**
- * LOGIKA IKLAN APK (ADMOB) - DIPERBARUI
- */
+// --- LOGIKA IKLAN APK (ADMOB) ---
 async function onDeviceReady() {
     console.log("Device Ready. Memulai AdMob...");
-    
     if (navigator.connection && navigator.connection.type === 'none') {
         console.log("Offline: Iklan tidak ditampilkan.");
     }
-
     if (typeof admob !== 'undefined') {
         try {
             await admob.start();
-            
-            // 1. TAMPILKAN BANNER (Bawah)
             const banner = new admob.BannerAd({
                 adUnitId: 'ca-app-pub-4389289343937853/8974663429', 
                 position: 'bottom'
             });
-            // Tampilkan banner, tangani error jika gagal
             banner.show().catch(e => console.error("Banner error:", e));
-
-            // 2. SIAPKAN INTERSTITIAL PERTAMA KALI
             loadInterstitial();
-
-        } catch (e) {
-            console.error("AdMob Init Error:", e);
-        }
+        } catch (e) { console.error("AdMob Init Error:", e); }
     }
 }
 
-// Fungsi Memuat Iklan Interstitial (DENGAN RETRY)
 async function loadInterstitial() {
-    if (typeof admob === 'undefined') return;
-    if (interstitialAd) return; // Sudah ada iklan siap/sedang memuat
-    if (isAdLoading) return; // Sedang proses memuat
-
+    if (typeof admob === 'undefined' || interstitialAd || isAdLoading) return;
     isAdLoading = true;
-    console.log("Memuat Iklan Interstitial...");
-
     try {
         const ad = new admob.InterstitialAd({
             adUnitId: 'ca-app-pub-4389289343937853/9633031171' 
         });
-
         await ad.load();
-        
-        // Sukses dimuat
         interstitialAd = ad;
         isAdLoading = false;
-        console.log("Iklan Interstitial SIAP ditampilkan.");
-
     } catch (e) {
-        console.error("Gagal memuat Interstitial (Mencoba lagi 10d):", e);
-        interstitialAd = null;
         isAdLoading = false;
-        // Coba lagi setelah 10 detik jika gagal (misal sinyal jelek atau no fill)
         setTimeout(loadInterstitial, 10000);
     }
 }
 
-// Fungsi Menampilkan Iklan Interstitial
 async function showInterstitialAd() {
     if (interstitialAd) {
         try {
             await interstitialAd.show();
-            // Setelah ditampilkan, kosongkan variabel agar bisa load yang baru
             interstitialAd = null;
-            // Load iklan berikutnya untuk nanti
             setTimeout(loadInterstitial, 2000); 
         } catch (e) {
-            console.error("Gagal menampilkan iklan:", e);
             interstitialAd = null;
-            loadInterstitial(); // Coba load lagi
+            loadInterstitial();
         }
     } else {
-        console.log("Iklan belum siap. Memuat ulang...");
-        loadInterstitial(); // Pancing load jika belum ada
+        loadInterstitial();
     }
 }
 
-// Cek Cordova
 if (document.URL.indexOf( 'http://' ) === -1 && document.URL.indexOf( 'https://' ) === -1) {
     document.addEventListener('deviceready', onDeviceReady, false);
+}
+
+/**
+ * KELAS ANIMASI KARTU
+ */
+class CardAnimation {
+    constructor(card, startX, startY, endX, endY, startRot, endRot, callback) {
+        this.card = card;
+        this.startX = startX;
+        this.startY = startY;
+        this.endX = endX;
+        this.endY = endY;
+        this.startRot = startRot;
+        this.endRot = endRot;
+        
+        this.currentX = startX;
+        this.currentY = startY;
+        this.currentRot = startRot;
+        
+        this.progress = 0;
+        this.speed = 0.08;
+        this.callback = callback;
+        this.finished = false;
+    }
+
+    update() {
+        if (this.finished) return;
+
+        this.progress += this.speed;
+        if (this.progress >= 1) {
+            this.progress = 1;
+            this.finished = true;
+            if (this.callback) this.callback();
+        }
+
+        let t = this.progress * this.progress * (3 - 2 * this.progress);
+
+        this.currentX = this.startX + (this.endX - this.startX) * t;
+        this.currentY = this.startY + (this.endY - this.startY) * t;
+        
+        let diffRot = this.endRot - this.startRot;
+        while (diffRot > Math.PI) diffRot -= Math.PI * 2;
+        while (diffRot < -Math.PI) diffRot += Math.PI * 2;
+
+        this.currentRot = this.startRot + diffRot * t;
+    }
+
+    draw() {
+        let oldX = this.card.x;
+        let oldY = this.card.y;
+        
+        this.card.x = this.currentX;
+        this.card.y = this.currentY;
+        
+        let flyingScale = 1.1; 
+        
+        ctx.save();
+        ctx.translate(this.currentX, this.currentY);
+        ctx.rotate(this.currentRot);
+        ctx.scale(flyingScale, flyingScale);
+        
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowBlur = 15 * UI_SCALE;
+        ctx.shadowOffsetY = 10 * UI_SCALE;
+        
+        // Base
+        ctx.fillStyle = COLORS.white;
+        ctx.beginPath(); ctx.roundRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS); ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        let mainColor = (this.card.color === 'black') ? COLORS.black : COLORS[this.card.color];
+        ctx.fillStyle = mainColor;
+        ctx.beginPath(); ctx.roundRect(-CARD_W/2 + (5*UI_SCALE), -CARD_H/2 + (5*UI_SCALE), CARD_W - (10*UI_SCALE), CARD_H - (10*UI_SCALE), CARD_RADIUS); ctx.fill();
+
+        if (this.card.type === 'wild' || this.card.type === 'wild4') {
+             this.card.drawWildFace();
+        } else {
+             this.card.drawNormalFace(mainColor);
+        }
+        ctx.restore();
+
+        this.card.x = oldX;
+        this.card.y = oldY;
+    }
 }
 
 /**
@@ -171,40 +296,64 @@ class Card {
     }
 
     draw(x, y, faceUp = true, scale = 1, dimmed = false, rotation = 0) {
-        this.x += (x - this.x) * 0.2;
-        this.y += (y - this.y) * 0.2;
-        
+        // Logic Interpolasi
+        if (rotation === 0 && faceUp) { 
+             this.x += (x - this.x) * 0.2;
+             this.y += (y - this.y) * 0.2;
+        } else {
+             this.x = x; this.y = y;
+        }
+
         let drawScale = scale;
         let hoverLift = (UI_SCALE < 0.8) ? 15 : 30;
 
+        let renderX = (rotation === 0 && faceUp) ? this.x : x;
+        let renderY = (rotation === 0 && faceUp) ? this.y : y;
+
         if (this.isHovered && faceUp && !dimmed && rotation === 0) {
-            y -= hoverLift;
+            renderY -= hoverLift;
             drawScale = 1.1;
         }
 
         ctx.save();
-        ctx.translate(this.x, (this.isHovered && rotation === 0 && !dimmed) ? y : this.y); 
+        ctx.translate(renderX, renderY); 
         ctx.rotate(rotation);
         ctx.scale(drawScale, drawScale);
 
+        // Shadow
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 10 * UI_SCALE;
         ctx.shadowOffsetY = 5 * UI_SCALE;
 
         this.drawRoundedRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS, COLORS.white);
-        
         ctx.shadowColor = "transparent";
 
         if (!faceUp) {
-            this.drawRoundedRect(-CARD_W/2 + (5*UI_SCALE), -CARD_H/2 + (5*UI_SCALE), CARD_W - (10*UI_SCALE), CARD_H - (10*UI_SCALE), CARD_RADIUS, COLORS.black);
+            // Bagian Belakang
+            let innerMargin = 5 * UI_SCALE;
+            this.drawRoundedRect(-CARD_W/2 + innerMargin, -CARD_H/2 + innerMargin, CARD_W - innerMargin*2, CARD_H - innerMargin*2, CARD_RADIUS, COLORS.black);
+            
             ctx.fillStyle = COLORS.red;
-            ctx.font = `bold italic ${30 * UI_SCALE}px Arial`;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, CARD_W/2.5, CARD_H/4, -30 * Math.PI/180, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = COLORS.yellow;
+            ctx.font = `bold italic ${24 * UI_SCALE}px Arial`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText("UNO", 0, 0);
+            
+            ctx.save();
+            ctx.rotate(-30 * Math.PI/180);
+            ctx.shadowColor = "black"; ctx.shadowBlur = 2; ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
+            ctx.fillText("UNO", 0, 2*UI_SCALE);
+            ctx.restore();
+
         } else {
+            // Bagian Depan
             let mainColor = (this.color === 'black') ? COLORS.black : COLORS[this.color];
-            this.drawRoundedRect(-CARD_W/2 + (5*UI_SCALE), -CARD_H/2 + (5*UI_SCALE), CARD_W - (10*UI_SCALE), CARD_H - (10*UI_SCALE), CARD_RADIUS, mainColor);
+            let innerMargin = 5 * UI_SCALE;
+            this.drawRoundedRect(-CARD_W/2 + innerMargin, -CARD_H/2 + innerMargin, CARD_W - innerMargin*2, CARD_H - innerMargin*2, CARD_RADIUS, mainColor);
 
             if (this.type === 'wild' || this.type === 'wild4') {
                 this.drawWildFace();
@@ -213,7 +362,8 @@ class Card {
             }
 
             if (dimmed) {
-                this.drawRoundedRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS, "rgba(0, 0, 0, 0.6)");
+                ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+                ctx.beginPath(); ctx.roundRect(-CARD_W/2, -CARD_H/2, CARD_W, CARD_H, CARD_RADIUS); ctx.fill();
             }
         }
         ctx.restore();
@@ -223,11 +373,18 @@ class Card {
         ctx.save();
         ctx.rotate(-25 * Math.PI / 180);
         ctx.fillStyle = COLORS.white;
+        
+        ctx.shadowColor = "rgba(0,0,0,0.2)";
+        ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.ellipse(0, 0, CARD_W/1.8, CARD_H/3.5, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowColor = "transparent";
 
         ctx.fillStyle = mainColor;
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
+        
         let displayVal = this.value;
         if (displayVal === 'skip') displayVal = '⊘';
         else if (displayVal === 'reverse') displayVal = '⇄';
@@ -244,6 +401,8 @@ class Card {
         ctx.textAlign = "left";
         let offset = 8 * UI_SCALE;
         let offsetY = 18 * UI_SCALE;
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        
         ctx.fillText(displayVal, -CARD_W/2 + offset, -CARD_H/2 + offsetY);
         ctx.save();
         ctx.rotate(Math.PI);
@@ -252,17 +411,25 @@ class Card {
     }
 
     drawWildFace() {
+        ctx.save();
         let size = 30 * UI_SCALE;
-        ctx.fillStyle = COLORS.red; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, Math.PI, 1.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
-        ctx.fillStyle = COLORS.blue; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 1.5*Math.PI, 0); ctx.lineTo(0,0); ctx.fill();
-        ctx.fillStyle = COLORS.green; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0, 0.5*Math.PI); ctx.lineTo(0,0); ctx.fill();
-        ctx.fillStyle = COLORS.yellow; ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0.5*Math.PI, Math.PI); ctx.lineTo(0,0); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, Math.PI, 1.5*Math.PI); ctx.lineTo(0,0); ctx.fillStyle = COLORS.red; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 1.5*Math.PI, 0); ctx.lineTo(0,0); ctx.fillStyle = COLORS.blue; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0, 0.5*Math.PI); ctx.lineTo(0,0); ctx.fillStyle = COLORS.green; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0, size, 0.5*Math.PI, Math.PI); ctx.lineTo(0,0); ctx.fillStyle = COLORS.yellow; ctx.fill();
+        ctx.restore();
 
-        ctx.fillStyle = "black";
-        ctx.font = `bold italic ${25 * UI_SCALE}px Arial`;
+        ctx.fillStyle = COLORS.black;
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.font = `bold italic ${28 * UI_SCALE}px Arial`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        
         let val = (this.value === '+4') ? '+4' : ''; 
-        if(val) ctx.fillText(val, 2 * UI_SCALE, 2 * UI_SCALE);
+        if(val) {
+            ctx.strokeText(val, 2 * UI_SCALE, 2 * UI_SCALE);
+            ctx.fillText(val, 2 * UI_SCALE, 2 * UI_SCALE);
+        }
 
         ctx.fillStyle = COLORS.white;
         ctx.font = `bold ${14 * UI_SCALE}px Arial`;
@@ -299,18 +466,26 @@ class Game {
         
         this.playerCount = 2; 
         this.currentColor = ''; 
-        this.message = "Selamat Datang";
-        this.particles = [];
+        this.message = "";
+        this.particles = []; 
+        this.activeAnimation = null; 
         
-        this.btn2Player = { text: "2 PEMAIN" };
-        this.btn4Player = { text: "4 PEMAIN" };
-        this.btnOnline = { text: "MODE ONLINE" };
-        this.btnQuit = { text: "KELUAR" };
-        this.drawBtn = { text: "AMBIL" };
+        this.currentLang = 'ID'; 
 
+        this.btn2Player = {};
+        this.btn4Player = {};
+        this.btnOnline = {};
+        this.btnQuit = {};
+        this.btnLang = {}; 
+
+        this.deckHitbox = { x: 0, y: 0, w: 0, h: 0 };
         this.comingSoonTimer = 0;
         this.activeModal = null; 
         this.tempInput = ""; 
+
+        this.mustDraw = false;
+        this.blinkAlpha = 1.0;
+        this.blinkDir = -0.05;
 
         const randomNames = ["Lathif", "Player1", "Jagoan", "Tamu", "Budi", "Siti", "UnoPro"];
         this.playerName = randomNames[Math.floor(Math.random() * randomNames.length)];
@@ -318,6 +493,32 @@ class Game {
         this.playerAvatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
 
         this.botProfiles = {};
+        this.initBackgroundParticles();
+    }
+
+    initBackgroundParticles() {
+        this.bgParticles = [];
+        for(let i=0; i<50; i++) {
+            this.bgParticles.push({
+                x: Math.random() * SCREEN_W,
+                y: Math.random() * SCREEN_H,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: (Math.random() - 0.5) * 0.5,
+                size: Math.random() * 3 + 1,
+                alpha: Math.random() * 0.5
+            });
+        }
+    }
+
+    updateBackgroundParticles() {
+        for(let p of this.bgParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            if(p.x < 0) p.x = SCREEN_W;
+            if(p.x > SCREEN_W) p.x = 0;
+            if(p.y < 0) p.y = SCREEN_H;
+            if(p.y > SCREEN_H) p.y = 0;
+        }
     }
 
     startGame(count) {
@@ -329,7 +530,7 @@ class Game {
         this.players['human'] = [];
         
         this.botProfiles = {};
-        const botNamesList = ["Alex", "Sarah", "Mike", "Luna", "Rizky", "Dewi", "Budi", "Robot", "AI_01"];
+        const botNamesList = ["Alex", "Sarah", "Mike", "Luna", "Rizky", "Dewi", "Budi", "Asep", "Budi"];
         const botColorsList = [COLORS.red, COLORS.blue, COLORS.green, COLORS.yellow, COLORS.grey];
         
         let botIds = [];
@@ -362,8 +563,9 @@ class Game {
         
         this.turnIndex = 0;
         this.direction = 1;
+        this.mustDraw = false;
         currentState = STATE.PLAYING;
-        this.message = "Giliran Anda!";
+        this.message = LANG[this.currentLang].turn_you;
     }
 
     createDeck() {
@@ -420,13 +622,34 @@ class Game {
     }
 
     update() {
+        this.updateBackgroundParticles();
+
         let btnW = 200 * UI_SCALE;
-        let btnH = 60 * UI_SCALE;
+        let btnH = 55 * UI_SCALE;
+        let padding = 15 * UI_SCALE;
+        
         this.btn2Player.w = btnW; this.btn2Player.h = btnH;
         this.btn4Player.w = btnW; this.btn4Player.h = btnH;
         this.btnOnline.w = btnW; this.btnOnline.h = btnH;
+        
+        this.btnLang.w = 50 * UI_SCALE; this.btnLang.h = 35 * UI_SCALE;
+        this.btnLang.x = SCREEN_W - this.btnLang.w - padding;
+        this.btnLang.y = padding;
+
         this.btnQuit.w = 100 * UI_SCALE; this.btnQuit.h = 40 * UI_SCALE;
-        this.drawBtn.w = 120 * UI_SCALE; this.drawBtn.h = 45 * UI_SCALE;
+        this.btnQuit.x = SCREEN_W - this.btnQuit.w - padding;
+        this.btnQuit.y = padding;
+        
+        let centerX = SCREEN_W / 2;
+        let centerY = SCREEN_H / 2;
+        let deckX = centerX - CARD_W - (15 * UI_SCALE); 
+        let deckY = centerY;
+        this.deckHitbox = { 
+            x: deckX - CARD_W/2, 
+            y: deckY - CARD_H/2, 
+            w: CARD_W, 
+            h: CARD_H 
+        };
 
         if (this.activeModal) {
             if (mouse.clicked) {
@@ -436,22 +659,35 @@ class Game {
             return; 
         }
 
+        if (this.activeAnimation) {
+            this.activeAnimation.update();
+            if (this.activeAnimation.finished) {
+                this.activeAnimation = null;
+            } else {
+                return;
+            }
+        }
+
         if (currentState === STATE.MENU) {
             let cx = SCREEN_W/2;
             let cy = SCREEN_H/2;
             
             this.btn2Player.x = cx - this.btn2Player.w - (10 * UI_SCALE);
             this.btn2Player.y = cy + (40 * UI_SCALE);
-            
             this.btn4Player.x = cx + (10 * UI_SCALE);
             this.btn4Player.y = cy + (40 * UI_SCALE);
-
             this.btnOnline.x = cx - this.btnOnline.w / 2;
             this.btnOnline.y = cy + (120 * UI_SCALE);
 
             if (this.comingSoonTimer > 0) this.comingSoonTimer--;
 
             if (mouse.clicked) {
+                if (this.isMouseOver(this.btnLang)) {
+                    this.currentLang = this.currentLang === 'ID' ? 'EN' : 'ID';
+                    mouse.clicked = false;
+                    return;
+                }
+
                 let pSize = 50 * UI_SCALE;
                 let distProfile = Math.sqrt((mouse.x - pSize)**2 + (mouse.y - pSize)**2);
                 if (distProfile < (40*UI_SCALE) || (mouse.x > pSize && mouse.x < (250*UI_SCALE) && mouse.y > (20*UI_SCALE) && mouse.y < (80*UI_SCALE))) {
@@ -478,7 +714,6 @@ class Game {
         if (currentState === STATE.GAME_OVER) {
             this.updateParticles();
             if(mouse.clicked) { 
-                // IKLAN: Muncul saat Game Over dan klik kembali
                 showInterstitialAd(); 
                 currentState = STATE.MENU; 
                 mouse.clicked = false; 
@@ -486,8 +721,6 @@ class Game {
             return;
         }
 
-        this.btnQuit.x = SCREEN_W - this.btnQuit.w - (20 * UI_SCALE);
-        this.btnQuit.y = 20 * UI_SCALE;
         if (mouse.clicked && this.isMouseOver(this.btnQuit)) {
              this.activeModal = 'QUIT';
              mouse.clicked = false;
@@ -501,8 +734,18 @@ class Game {
         }
 
         if (currPlayer === 'human' && currentState === STATE.PLAYING) {
-            this.drawBtn.x = SCREEN_W / 2 + CARD_W + (40 * UI_SCALE);
-            this.drawBtn.y = SCREEN_H - (120 * UI_SCALE);
+            let hasMove = false;
+            for(let c of this.players.human) {
+                if (this.isValidMove(c)) { hasMove = true; break; }
+            }
+            this.mustDraw = !hasMove;
+            
+            if (this.mustDraw) {
+                 this.blinkAlpha += this.blinkDir;
+                 if (this.blinkAlpha <= 0.3 || this.blinkAlpha >= 1.0) this.blinkDir *= -1;
+            } else {
+                 this.blinkAlpha = 1.0;
+            }
 
             let hand = this.players.human;
             let spacing = Math.min(50 * UI_SCALE, (SCREEN_W - (100 * UI_SCALE)) / hand.length);
@@ -525,14 +768,10 @@ class Game {
                 if (hoveredIndex !== -1) {
                     this.humanPlay(hoveredIndex);
                 } else {
-                    let deckX = SCREEN_W / 2 - CARD_W - (20 * UI_SCALE);
-                    let deckY = SCREEN_H / 2;
-                    let clickedDeck = (mouse.x >= deckX - CARD_W/2 && mouse.x <= deckX + CARD_W/2 &&
-                                     mouse.y >= deckY - CARD_H/2 && mouse.y <= deckY + CARD_H/2);
-                    let clickedBtn = this.isMouseOver(this.drawBtn);
+                    let isDeckClicked = (mouse.x >= this.deckHitbox.x && mouse.x <= this.deckHitbox.x + this.deckHitbox.w &&
+                                         mouse.y >= this.deckHitbox.y && mouse.y <= this.deckHitbox.y + this.deckHitbox.h);
 
-                    if (clickedDeck || clickedBtn) {
-                        this.showMessage("Mengambil kartu...");
+                    if (isDeckClicked) {
                         this.drawCard('human');
                         setTimeout(() => this.nextTurn(), 500);
                     }
@@ -571,7 +810,7 @@ class Game {
                 this.handleSpecialCard(card);
             }
         } else {
-            this.showMessage("Kartu tidak cocok!");
+            
         }
     }
 
@@ -586,22 +825,48 @@ class Game {
         if (validIndices.length > 0) {
             let index = validIndices[Math.floor(Math.random() * validIndices.length)];
             let card = hand[index];
-            this.discardPile.push(card);
+            
+            let playedCard = card;
+
             hand.splice(index, 1);
-            if (card.color === 'black') {
-                const colors = ['red', 'blue', 'green', 'yellow'];
-                let counts = {red:0, blue:0, green:0, yellow:0};
-                hand.forEach(c => { if(c.color !== 'black') counts[c.color]++; });
-                let bestColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
-                this.currentColor = bestColor;
-                this.showMessage(`${this.getPlayerName(playerId)} memilih ${bestColor.toUpperCase()}`);
-                this.handleSpecialCard(card);
-            } else {
-                this.currentColor = card.color;
-                this.handleSpecialCard(card);
+            
+            let startX, startY, startRot;
+            let centerX = SCREEN_W/2;
+            let centerY = SCREEN_H/2;
+            
+            if (playerId === 'botTop') {
+                startX = SCREEN_W/2; startY = -100; startRot = Math.PI;
+            } else if (playerId === 'botLeft') {
+                startX = -100; startY = SCREEN_H/2; startRot = Math.PI/2;
+            } else { 
+                startX = SCREEN_W + 100; startY = SCREEN_H/2; startRot = -Math.PI/2;
             }
+
+            let endX = centerX + (Math.random()*20-10);
+            let endY = centerY + (Math.random()*20-10);
+            let endRot = (Math.random() - 0.5) * 0.5;
+
+            this.activeAnimation = new CardAnimation(playedCard, startX, startY, endX, endY, startRot, endRot, () => {
+                this.discardPile.push(playedCard);
+                
+                if (playedCard.color === 'black') {
+                    let counts = {red:0, blue:0, green:0, yellow:0};
+                    hand.forEach(c => { if(c.color !== 'black') counts[c.color]++; });
+                    let bestColor = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+                    this.currentColor = bestColor;
+                    
+                    let txt = LANG[this.currentLang].bot_pick;
+                    this.showMessage(`${this.getPlayerName(playerId)} ${txt} ${bestColor.toUpperCase()}`);
+                    
+                    this.handleSpecialCard(playedCard);
+                } else {
+                    this.currentColor = playedCard.color;
+                    this.handleSpecialCard(playedCard);
+                }
+            });
         } else {
-            this.showMessage(`${this.getPlayerName(playerId)} mengambil kartu`);
+            let txt = LANG[this.currentLang].bot_draw;
+            this.showMessage(`${this.getPlayerName(playerId)} ${txt}`);
             this.drawCard(playerId);
             this.nextTurn();
         }
@@ -612,38 +877,37 @@ class Game {
         if (this.players[currP].length === 0) {
             currentState = STATE.GAME_OVER;
             winner = currP;
-            
-            // IKLAN: Saat game selesai (menang/kalah)
             showInterstitialAd();
-            
             this.createParticles(); 
             return;
         }
+        
+        let L = LANG[this.currentLang];
 
         if (card.value === 'reverse') {
             if (this.playerCount === 2) {
-                this.showMessage("REVERSE (SKIP)!");
+                this.showMessage(L.reverse_skip);
                  if(this.getCurrentPlayer() !== 'human') { 
                      this.botTimer = setTimeout(() => this.botPlay(currP), 1500);
                  }
             } else {
                 this.direction *= -1;
-                this.showMessage("ARAH BERBALIK!");
+                this.showMessage(L.reverse);
                 this.nextTurn();
             }
         } else if (card.value === 'skip') {
-            this.showMessage("SKIP!");
+            this.showMessage(L.skip);
             this.nextTurn(true); 
         } else if (card.value === '+2') {
             let nextIdx = (this.turnIndex + this.direction + this.turnOrder.length) % this.turnOrder.length;
             let victim = this.turnOrder[nextIdx];
-            this.showMessage(`+2 untuk ${this.getPlayerName(victim)}!`);
+            this.showMessage(`${L.plus2} ${this.getPlayerName(victim)}!`);
             this.drawCard(victim, 2);
             this.nextTurn(true); 
         } else if (card.value === '+4') {
             let nextIdx = (this.turnIndex + this.direction + this.turnOrder.length) % this.turnOrder.length;
             let victim = this.turnOrder[nextIdx];
-             this.showMessage(`+4 untuk ${this.getPlayerName(victim)}!`);
+             this.showMessage(`${L.plus4} ${this.getPlayerName(victim)}!`);
              this.drawCard(victim, 4);
              this.nextTurn(true);
         } else {
@@ -659,11 +923,17 @@ class Game {
         if (this.turnIndex < 0) this.turnIndex += this.turnOrder.length;
 
         let nextP = this.getCurrentPlayer();
-        this.message = (nextP === 'human') ? "Giliran Anda!" : `Giliran ${this.getPlayerName(nextP)}...`;
+        let L = LANG[this.currentLang];
+        
+        if (this.currentLang === 'ID') {
+             this.message = (nextP === 'human') ? L.turn_you : L.turn_bot + this.getPlayerName(nextP);
+        } else {
+             this.message = (nextP === 'human') ? L.turn_you : this.getPlayerName(nextP) + L.turn_bot;
+        }
     }
 
     getPlayerName(id) {
-        if (id === 'human') return this.playerName || 'Anda'; 
+        if (id === 'human') return this.playerName || 'You'; 
         if (this.botProfiles[id]) return this.botProfiles[id].name;
         return id;
     }
@@ -690,7 +960,7 @@ class Game {
     }
 
     handleModalClick() {
-        let w = 400 * UI_SCALE; let h = 200 * UI_SCALE;
+        let w = 400 * UI_SCALE; let h = 220 * UI_SCALE;
         let x = SCREEN_W/2 - w/2;
         let y = SCREEN_H/2 - h/2;
 
@@ -701,7 +971,6 @@ class Game {
 
         if (this.activeModal === 'QUIT') {
             if (mouse.x >= btn1X && mouse.x <= btn1X+btnW && mouse.y >= btnY && mouse.y <= btnY+btnH) {
-                // IKLAN: Muncul saat keluar dari game (menyerah)
                 showInterstitialAd();
                 currentState = STATE.MENU;
                 this.activeModal = null;
@@ -726,10 +995,45 @@ class Game {
 
     showMessage(text) { this.message = text; }
 
+    drawBackground() {
+        let grad = ctx.createRadialGradient(SCREEN_W/2, SCREEN_H/2, 0, SCREEN_W/2, SCREEN_H/2, SCREEN_W);
+        grad.addColorStop(0, '#2c3e50');
+        grad.addColorStop(1, '#000000');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+
+        ctx.fillStyle = "rgba(255,255,255,0.05)";
+        for(let p of this.bgParticles) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    drawButton(btn, colorOverride) {
+        let color = colorOverride || COLORS.blue;
+        let isHover = this.isMouseOver(btn);
+        
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 5;
+
+        ctx.fillStyle = isHover ? COLORS.yellow : color;
+        ctx.beginPath(); 
+        ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 15 * UI_SCALE); 
+        ctx.fill();
+        
+        ctx.shadowColor = "transparent";
+
+        ctx.fillStyle = isHover ? "black" : "white";
+        ctx.font = `bold ${22 * UI_SCALE}px 'Segoe UI', sans-serif`;
+        ctx.textAlign = "center"; 
+        ctx.textBaseline = "middle";
+        ctx.fillText(LANG[this.currentLang][btn.text] || btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
+    }
+
     draw() {
-        let grad = ctx.createRadialGradient(SCREEN_W/2, SCREEN_H/2, 100, SCREEN_W/2, SCREEN_H/2, 800);
-        grad.addColorStop(0, '#2c3e50'); grad.addColorStop(1, '#000');
-        ctx.fillStyle = grad; ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+        this.drawBackground();
 
         if (currentState === STATE.MENU) { 
             this.drawMenu(); 
@@ -760,9 +1064,25 @@ class Game {
         }
 
         let deckX = centerX - CARD_W - (15 * UI_SCALE); let deckY = centerY;
+        // Terapkan efek kedip jika mustDraw aktif
+        if (this.getCurrentPlayer() === 'human' && this.mustDraw) {
+            ctx.globalAlpha = this.blinkAlpha;
+        }
+
         for(let i=0; i<Math.min(5, this.deck.length); i++) {
             let dummy = new Card('black', '', '');
-            dummy.draw(deckX - (i*2*UI_SCALE), deckY - (i*2*UI_SCALE), false);
+            dummy.x = deckX - (i*2*UI_SCALE);
+            dummy.y = deckY - (i*2*UI_SCALE);
+            dummy.draw(dummy.x, dummy.y, false); 
+        }
+        ctx.globalAlpha = 1.0; // Reset alpha
+        
+        if (this.getCurrentPlayer() === 'human') {
+             ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+             ctx.fillStyle = "white"; ctx.font = `bold ${16 * UI_SCALE}px Arial`; 
+             ctx.textAlign = "center";
+             ctx.fillText(LANG[this.currentLang].draw, deckX, deckY - CARD_H/2 - (15 * UI_SCALE));
+             ctx.shadowColor = "transparent";
         }
 
         this.drawHand('human', SCREEN_W/2, SCREEN_H - CARD_H/2 - (20 * UI_SCALE), 0);
@@ -773,83 +1093,21 @@ class Game {
             this.drawHand('botRight', SCREEN_W - CARD_H/2 - (20 * UI_SCALE), SCREEN_H/2, -Math.PI/2);
         }
 
+        if (this.activeAnimation) {
+            this.activeAnimation.draw();
+        }
+
         ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
-        ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textAlign = "center";
+        ctx.font = `bold ${24 * UI_SCALE}px 'Segoe UI'`; ctx.textAlign = "center";
         ctx.fillText(this.message, SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
         ctx.shadowColor = "transparent";
 
-        if (this.getCurrentPlayer() === 'human') {
-            ctx.fillStyle = "white"; ctx.font = `bold ${14 * UI_SCALE}px Arial`;
-            ctx.fillText("DECK", deckX, deckY - CARD_H/2 - (10 * UI_SCALE));
-
-            let btn = this.drawBtn;
-            let isHover = (mouse.x >= btn.x && mouse.x <= btn.x+btn.w && mouse.y >= btn.y && mouse.y <= btn.y+btn.h);
-            this.drawRoundedRect(btn.x, btn.y, btn.w, btn.h, 10 * UI_SCALE, isHover ? "#eee" : "white");
-            ctx.fillStyle = "#333"; ctx.font = `bold ${18 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
-        }
-
-        let qBtn = this.btnQuit;
-        let qHover = (mouse.x >= qBtn.x && mouse.x <= qBtn.x+qBtn.w && mouse.y >= qBtn.y && mouse.y <= qBtn.y+qBtn.h);
-        this.drawRoundedRect(qBtn.x, qBtn.y, qBtn.w, qBtn.h, 5 * UI_SCALE, qHover ? "#ff5555" : "rgba(255,255,255,0.2)");
-        ctx.fillStyle = "white"; ctx.font = `bold ${16 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(qBtn.text, qBtn.x + qBtn.w/2, qBtn.y + qBtn.h/2);
+        this.drawButton(this.btnQuit, COLORS.red);
 
         if (currentState === STATE.COLOR_PICKER) this.drawColorPicker();
         if (currentState === STATE.GAME_OVER) this.drawGameOver();
         
         if (this.activeModal) this.drawModal();
-    }
-
-    drawModal() {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.fillRect(0,0, SCREEN_W, SCREEN_H);
-
-        let w = 400 * UI_SCALE; let h = 200 * UI_SCALE;
-        let x = SCREEN_W/2 - w/2;
-        let y = SCREEN_H/2 - h/2;
-
-        ctx.shadowColor = "black"; ctx.shadowBlur = 20;
-        ctx.fillStyle = "#333";
-        ctx.beginPath(); ctx.roundRect(x, y, w, h, 15 * UI_SCALE); ctx.fill();
-        ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
-        ctx.shadowColor = "transparent";
-
-        ctx.fillStyle = "white"; ctx.textAlign = "center";
-        
-        if (this.activeModal === 'QUIT') {
-            ctx.font = `bold ${24 * UI_SCALE}px Arial`;
-            ctx.fillText("Keluar Permainan?", SCREEN_W/2, y + (50 * UI_SCALE));
-            ctx.font = `${18 * UI_SCALE}px Arial`;
-            ctx.fillText("Kamu yakin? Nanti kamu akan kalah loh", SCREEN_W/2, y + (90 * UI_SCALE));
-
-            this.drawModalBtn("YA", x + (50 * UI_SCALE), y + h - (60 * UI_SCALE), "#ff5555");
-            this.drawModalBtn("TIDAK", x + w - (170 * UI_SCALE), y + h - (60 * UI_SCALE), "#55aa55");
-        } 
-        else if (this.activeModal === 'PROFILE') {
-            ctx.font = `bold ${24 * UI_SCALE}px Arial`;
-            ctx.fillText("Ubah Nama Profil", SCREEN_W/2, y + (40 * UI_SCALE));
-
-            ctx.fillStyle = "white";
-            ctx.fillRect(x + (50 * UI_SCALE), y + (60 * UI_SCALE), w - (100 * UI_SCALE), 40 * UI_SCALE);
-            ctx.fillStyle = "black"; ctx.font = `${20 * UI_SCALE}px Arial`; ctx.textAlign="left";
-            ctx.fillText(this.tempInput + "|", x + (60 * UI_SCALE), y + (87 * UI_SCALE)); 
-
-            this.drawModalBtn("SIMPAN", x + (50 * UI_SCALE), y + h - (60 * UI_SCALE), "#5555ff");
-            this.drawModalBtn("BATAL", x + w - (170 * UI_SCALE), y + h - (60 * UI_SCALE), "#ff5555");
-        }
-    }
-
-    drawModalBtn(text, x, y, color) {
-        let w = 120 * UI_SCALE; let h = 40 * UI_SCALE;
-        let isHover = (mouse.x >= x && mouse.x <= x+w && mouse.y >= y && mouse.y <= y+h);
-        
-        ctx.fillStyle = isHover ? "white" : color;
-        ctx.beginPath(); ctx.roundRect(x, y, w, h, 8 * UI_SCALE); ctx.fill();
-        
-        ctx.fillStyle = isHover ? color : "white";
-        ctx.font = `bold ${16 * UI_SCALE}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillText(text, x + w/2, y + h/2);
     }
 
     drawHand(playerId, centerX, centerY, rotation) {
@@ -908,75 +1166,141 @@ class Game {
         ctx.fillStyle = COLORS.black;
         ctx.beginPath(); ctx.roundRect(x - CARD_W/2 + 4*UI_SCALE, y - CARD_H/2 + 4*UI_SCALE, CARD_W - 8*UI_SCALE, CARD_H - 8*UI_SCALE, CARD_RADIUS); ctx.fill();
         ctx.fillStyle = COLORS.red;
-        ctx.font = `bold ${20 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText("UNO", x, y);
+        ctx.font = `bold italic ${24 * UI_SCALE}px Arial`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-30 * Math.PI/180);
+        ctx.fillText("UNO", 0, 2*UI_SCALE);
+        ctx.restore();
+        
         ctx.shadowColor = "transparent";
     }
 
     drawMenu() {
-        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
-        
-        ctx.shadowColor = "black"; ctx.shadowBlur = 10;
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 20;
         ctx.fillStyle = "#ff5555";
-        ctx.font = `bold italic ${100 * UI_SCALE}px Arial`; ctx.textAlign = "center";
-        ctx.fillText("UNO", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
-        ctx.strokeStyle = "white"; ctx.lineWidth = 4 * UI_SCALE;
-        ctx.strokeText("UNO", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
+        ctx.font = `bold italic ${120 * UI_SCALE}px Arial`; ctx.textAlign = "center";
+        ctx.fillText("UNO", SCREEN_W/2, SCREEN_H/2 - (120 * UI_SCALE));
+        ctx.strokeStyle = "white"; ctx.lineWidth = 5 * UI_SCALE;
+        ctx.strokeText("UNO", SCREEN_W/2, SCREEN_H/2 - (120 * UI_SCALE));
         ctx.shadowColor = "transparent";
-
-        let b2 = this.btn2Player;
-        let h2 = this.isMouseOver(b2);
-        this.drawRoundedRect(b2.x, b2.y, b2.w, b2.h, 10 * UI_SCALE, h2 ? "#ffaa00" : COLORS.blue);
-        ctx.fillStyle = "white"; ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textBaseline="middle";
-        ctx.fillText(b2.text, b2.x + b2.w/2, b2.y + b2.h/2);
-
-        let b4 = this.btn4Player;
-        let h4 = this.isMouseOver(b4);
-        this.drawRoundedRect(b4.x, b4.y, b4.w, b4.h, 10 * UI_SCALE, h4 ? "#ffaa00" : COLORS.green);
-        ctx.fillStyle = "white"; 
-        ctx.fillText(b4.text, b4.x + b4.w/2, b4.y + b4.h/2);
-
-        let bOn = this.btnOnline;
-        let hOn = this.isMouseOver(bOn);
-        this.drawRoundedRect(bOn.x, bOn.y, bOn.w, bOn.h, 10 * UI_SCALE, hOn ? "#aaa" : COLORS.grey);
-        ctx.fillStyle = "white";
-        ctx.fillText(bOn.text, bOn.x + bOn.w/2, bOn.y + bOn.h/2);
-
-        let pSize = 50 * UI_SCALE;
-        let pR = pSize / 2;
-        ctx.beginPath(); ctx.arc(pSize, pSize, pR, 0, Math.PI*2);
-        ctx.fillStyle = this.playerAvatarColor;
-        ctx.fill(); 
-        ctx.lineWidth=2; ctx.strokeStyle="white"; ctx.stroke();
         
-        ctx.fillStyle = "white"; ctx.font = `bold ${24 * UI_SCALE}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillStyle = "white"; ctx.font = `${20 * UI_SCALE}px 'Segoe UI'`;
+        ctx.fillText("The Classic Card Game", SCREEN_W/2, SCREEN_H/2 - (80 * UI_SCALE));
+
+        this.btn2Player.text = 'play_2';
+        this.btn4Player.text = 'play_4';
+        this.btnOnline.text = 'online';
+        this.btnQuit.text = 'quit'; 
+
+        this.drawButton(this.btn2Player, COLORS.blue);
+        this.drawButton(this.btn4Player, COLORS.green);
+        this.drawButton(this.btnOnline, COLORS.grey);
+
+        let pSize = 40 * UI_SCALE;
+        let pX = 40 * UI_SCALE; let pY = 40 * UI_SCALE;
+        
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur=10;
+        ctx.beginPath(); ctx.arc(pX, pY, pSize/2, 0, Math.PI*2);
+        ctx.fillStyle = this.playerAvatarColor; ctx.fill(); 
+        ctx.lineWidth=2; ctx.strokeStyle="white"; ctx.stroke();
+        ctx.restore();
+        
+        ctx.fillStyle = "white"; ctx.font = `bold ${20 * UI_SCALE}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
         let initial = this.playerName.charAt(0).toUpperCase();
-        ctx.fillText(initial, pSize, pSize);
+        ctx.fillText(initial, pX, pY);
 
-        ctx.textAlign="left"; ctx.font = `bold ${20 * UI_SCALE}px Arial`;
-        ctx.fillText(this.playerName, pSize + (35 * UI_SCALE), pSize);
-        ctx.fillStyle = "#aaa"; ctx.font = `italic ${12 * UI_SCALE}px Arial`;
-        ctx.fillText("(Klik untuk ubah)", pSize + (35 * UI_SCALE), pSize + (20 * UI_SCALE));
+        ctx.textAlign="left"; ctx.font = `bold ${20 * UI_SCALE}px 'Segoe UI'`;
+        ctx.fillText(this.playerName, pX + pSize/1.5, pY - 5*UI_SCALE);
+        ctx.fillStyle = "#ccc"; ctx.font = `italic ${12 * UI_SCALE}px 'Segoe UI'`;
+        let hint = LANG[this.currentLang].profile_hint;
+        ctx.fillText(hint, pX + pSize/1.5, pY + 15*UI_SCALE);
 
+        let langBtnX = SCREEN_W - 60*UI_SCALE;
+        let langBtnY = 30*UI_SCALE;
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.beginPath(); ctx.roundRect(langBtnX, langBtnY, 40*UI_SCALE, 30*UI_SCALE, 5); ctx.fill();
+        ctx.fillStyle = "white"; ctx.font = `bold ${14*UI_SCALE}px Arial`; ctx.textAlign="center";
+        ctx.fillText(this.currentLang, langBtnX + 20*UI_SCALE, langBtnY + 15*UI_SCALE);
+        
         if (this.comingSoonTimer > 0) {
-            ctx.fillStyle = "rgba(0,0,0,0.8)";
-            ctx.beginPath(); ctx.roundRect(SCREEN_W/2 - (150 * UI_SCALE), SCREEN_H/2 + (100 * UI_SCALE), 300 * UI_SCALE, 60 * UI_SCALE, 10 * UI_SCALE); ctx.fill();
-            ctx.fillStyle = "yellow"; ctx.font = `bold ${20 * UI_SCALE}px Arial`; ctx.textAlign="center";
-            ctx.fillText("COMING SOON!", SCREEN_W/2, SCREEN_H/2 + (130 * UI_SCALE));
-            ctx.font = `${14 * UI_SCALE}px Arial`; ctx.fillStyle = "white";
-            ctx.fillText("Mode Online sedang dikembangkan", SCREEN_W/2, SCREEN_H/2 + (150 * UI_SCALE));
+            ctx.fillStyle = "rgba(0,0,0,0.85)";
+            ctx.beginPath(); ctx.roundRect(SCREEN_W/2 - (180 * UI_SCALE), SCREEN_H/2 + (120 * UI_SCALE), 360 * UI_SCALE, 70 * UI_SCALE, 15 * UI_SCALE); ctx.fill();
+            
+            ctx.fillStyle = COLORS.yellow; ctx.font = `bold ${22 * UI_SCALE}px 'Segoe UI'`; ctx.textAlign="center";
+            ctx.fillText(LANG[this.currentLang].coming_soon, SCREEN_W/2, SCREEN_H/2 + (150 * UI_SCALE));
+            ctx.font = `${14 * UI_SCALE}px 'Segoe UI'`; ctx.fillStyle = "white";
+            ctx.fillText(LANG[this.currentLang].coming_soon_desc, SCREEN_W/2, SCREEN_H/2 + (175 * UI_SCALE));
         }
 
-        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
         ctx.textAlign="center"; ctx.textBaseline="alphabetic";
-        ctx.font = `${14 * UI_SCALE}px Arial`;
-        ctx.fillText("© 2025 UNO Game - By Lathif", SCREEN_W / 2, SCREEN_H - (20 * UI_SCALE));
+        ctx.font = `${12 * UI_SCALE}px Arial`;
+        ctx.fillText("© 2025 UNO Game - By Lathif", SCREEN_W / 2, SCREEN_H - (15 * UI_SCALE));
+    }
+
+    drawModal() {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0,0, SCREEN_W, SCREEN_H);
+
+        let w = 400 * UI_SCALE; let h = 220 * UI_SCALE;
+        let x = SCREEN_W/2 - w/2;
+        let y = SCREEN_H/2 - h/2;
+        let L = LANG[this.currentLang];
+
+        ctx.shadowColor = "black"; ctx.shadowBlur = 30;
+        ctx.fillStyle = "#2c3e50";
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 20 * UI_SCALE); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.shadowColor = "transparent";
+
+        ctx.fillStyle = "white"; ctx.textAlign = "center";
+        
+        if (this.activeModal === 'QUIT') {
+            ctx.font = `bold ${26 * UI_SCALE}px 'Segoe UI'`;
+            ctx.fillText(L.quit_title, SCREEN_W/2, y + (50 * UI_SCALE));
+            ctx.font = `${16 * UI_SCALE}px 'Segoe UI'`;
+            ctx.fillStyle = "#ddd";
+            ctx.fillText(L.quit_msg, SCREEN_W/2, y + (90 * UI_SCALE));
+
+            this.drawModalBtn(L.btn_yes, x + (50 * UI_SCALE), y + h - (70 * UI_SCALE), COLORS.red);
+            this.drawModalBtn(L.btn_no, x + w - (170 * UI_SCALE), y + h - (70 * UI_SCALE), COLORS.green);
+        } 
+        else if (this.activeModal === 'PROFILE') {
+            ctx.font = `bold ${24 * UI_SCALE}px 'Segoe UI'`;
+            ctx.fillText(L.profile_title, SCREEN_W/2, y + (40 * UI_SCALE));
+
+            ctx.fillStyle = "white";
+            ctx.fillRect(x + (50 * UI_SCALE), y + (70 * UI_SCALE), w - (100 * UI_SCALE), 40 * UI_SCALE);
+            ctx.fillStyle = "black"; ctx.font = `${20 * UI_SCALE}px Arial`; ctx.textAlign="left";
+            ctx.fillText(this.tempInput + "|", x + (60 * UI_SCALE), y + (97 * UI_SCALE)); 
+
+            this.drawModalBtn(L.btn_save, x + (50 * UI_SCALE), y + h - (60 * UI_SCALE), COLORS.blue);
+            this.drawModalBtn(L.btn_cancel, x + w - (170 * UI_SCALE), y + h - (60 * UI_SCALE), COLORS.red);
+        }
+    }
+
+    drawModalBtn(text, x, y, color) {
+        let w = 120 * UI_SCALE; let h = 45 * UI_SCALE;
+        let isHover = (mouse.x >= x && mouse.x <= x+w && mouse.y >= y && mouse.y <= y+h);
+        
+        ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 5; ctx.shadowOffsetY=3;
+        ctx.fillStyle = isHover ? COLORS.yellow : color;
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 10 * UI_SCALE); ctx.fill();
+        ctx.shadowColor = "transparent";
+        
+        ctx.fillStyle = isHover ? "black" : "white";
+        ctx.font = `bold ${16 * UI_SCALE}px 'Segoe UI'`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(text, x + w/2, y + h/2);
     }
 
     drawColorPicker() {
-        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
-        ctx.fillStyle = "white"; ctx.font = `bold ${40 * UI_SCALE}px Arial`;
-        ctx.fillText("PILIH WARNA", SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
+        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        ctx.fillStyle = "white"; ctx.font = `bold ${30 * UI_SCALE}px 'Segoe UI'`;
+        ctx.textAlign = "center";
+        ctx.fillText(LANG[this.currentLang].color_pick, SCREEN_W/2, SCREEN_H/2 - (100 * UI_SCALE));
 
         let size = 80 * UI_SCALE; let gap = 20 * UI_SCALE;
         let totalW = (size*4) + (gap*3);
@@ -987,34 +1311,36 @@ class Game {
         for(let i=0; i<4; i++) {
             let bx = startX + i*(size+gap);
             ctx.fillStyle = COLORS[colors[i]];
+            
+            ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 15;
             if (mouse.x >= bx && mouse.x <= bx+size && mouse.y >= startY && mouse.y <= startY+size) {
                  ctx.strokeStyle = "white"; ctx.lineWidth = 5 * UI_SCALE;
                  ctx.strokeRect(bx-(5*UI_SCALE), startY-(5*UI_SCALE), size+(10*UI_SCALE), size+(10*UI_SCALE));
+                 ctx.shadowBlur = 25;
             }
-            ctx.fillRect(bx, startY, size, size);
+            ctx.beginPath(); ctx.roundRect(bx, startY, size, size, 10*UI_SCALE); ctx.fill();
+            ctx.shadowColor = "transparent";
         }
     }
 
     drawGameOver() {
-        this.drawParticles();
-        ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        this.updateParticles();
+        this.drawBackground(); // Draw bg behind game over text
         
-        let msg = (winner === 'human') ? "ANDA MENANG!" : `${this.getPlayerName(winner).toUpperCase()} MENANG!`;
+        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,SCREEN_W, SCREEN_H);
+        
+        let L = LANG[this.currentLang];
+        let msg = (winner === 'human') ? L.win_you : `${L.win_bot_prefix}${this.getPlayerName(winner).toUpperCase()}${L.win_bot_suffix}`;
         let color = (winner === 'human') ? COLORS.green : COLORS.red;
 
+        ctx.shadowColor = color; ctx.shadowBlur = 30;
         ctx.fillStyle = color;
-        ctx.font = `bold ${60 * UI_SCALE}px Arial`; ctx.textAlign = "center";
+        ctx.font = `bold italic ${50 * UI_SCALE}px 'Segoe UI'`; ctx.textAlign = "center";
         ctx.fillText(msg, SCREEN_W/2, SCREEN_H/2);
+        ctx.shadowColor = "transparent";
         
-        ctx.fillStyle = "white"; ctx.font = `${24 * UI_SCALE}px Arial`;
-        ctx.fillText("Klik untuk main lagi", SCREEN_W/2, SCREEN_H/2 + (60 * UI_SCALE));
-    }
-    
-    drawRoundedRect(x, y, w, h, r, color) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.roundRect(x, y, w, h, r);
-        ctx.fill();
+        ctx.fillStyle = "white"; ctx.font = `${20 * UI_SCALE}px 'Segoe UI'`;
+        ctx.fillText("(Tap anywhere)", SCREEN_W/2, SCREEN_H/2 + (60 * UI_SCALE));
     }
 
     createParticles() {
